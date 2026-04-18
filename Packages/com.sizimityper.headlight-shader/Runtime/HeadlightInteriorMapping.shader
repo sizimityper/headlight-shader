@@ -7,6 +7,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
         _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
         _FresnelIntensity ("Fresnel Intensity", Range(0, 1)) = 0.5
+        _LensRoughness ("Lens Roughness", Range(0, 1)) = 0.0
 
         [Header(Lens Flute Refraction)]
         _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
@@ -16,9 +17,9 @@ Shader "Custom/HeadlightInteriorMapping"
         _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
 
         [Header(Reflector)]
-        _MatCap ("MatCap", 2D) = "white" {}
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
+        _ReflectorRoughness ("Reflector Roughness", Range(0, 1)) = 0.0
         _ReflectorBrightness ("Reflector Brightness", Range(0, 2)) = 1.0
 
         [Header(Bulb Emission)]
@@ -44,6 +45,9 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma multi_compile_fog
 
             #include "UnityCG.cginc"
+            #ifndef UNITY_SPECCUBE_LOD_STEPS
+                #define UNITY_SPECCUBE_LOD_STEPS 6
+            #endif
 
             struct appdata
             {
@@ -59,26 +63,28 @@ Shader "Custom/HeadlightInteriorMapping"
                 float2 uv : TEXCOORD0;
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
-                float3 worldTangent : TEXCOORD3;
-                float3 worldBitangent : TEXCOORD4;
-                float3 objectPos : TEXCOORD5;
-                float3 objectViewDir : TEXCOORD6;
-                UNITY_FOG_COORDS(7)
+                float3 objTangent : TEXCOORD3;
+                float3 objBitangent : TEXCOORD4;
+                float3 objNormal : TEXCOORD5;
+                float3 objectPos : TEXCOORD6;
+                float3 objectViewDir : TEXCOORD7;
+                UNITY_FOG_COORDS(8)
             };
 
             sampler2D _LensNormal;
             float4 _LensNormal_ST;
-            sampler2D _MatCap;
 
             float _SpecularPower;
             float _SpecularIntensity;
             float _FresnelPower;
             float _FresnelIntensity;
+            float _LensRoughness;
             float _RefractionStrength;
 
             float4 _Scale;
             float4 _FacetCount;
             float _FacetStrength;
+            float _ReflectorRoughness;
             float _ReflectorBrightness;
 
             float4 _BulbPosition;
@@ -95,8 +101,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.uv = TRANSFORM_TEX(v.uv, _LensNormal);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldTangent = UnityObjectToWorldDir(v.tangent.xyz);
-                o.worldBitangent = cross(o.worldNormal, o.worldTangent) * v.tangent.w;
+                o.objNormal = normalize(v.normal);
+                o.objTangent = normalize(v.tangent.xyz);
+                o.objBitangent = cross(o.objNormal, o.objTangent) * v.tangent.w;
                 o.objectPos = v.vertex.xyz;
 
                 // View direction in object space for interior mapping
@@ -112,16 +119,17 @@ Shader "Custom/HeadlightInteriorMapping"
             bool interiorMapping(float3 rayOrigin, float3 rayDir, float3 boxScale,
                                  out float3 hitPos, out float3 hitNormal, out float2 hitUV)
             {
-                // Box bounds: -boxScale to +boxScale (but we only care about inner walls)
-                // Ray starts from front face, goes inward
                 float3 invDir = 1.0 / rayDir;
                 float3 tMin = (-boxScale - rayOrigin) * invDir;
                 float3 tMax = ( boxScale - rayOrigin) * invDir;
 
-                float3 tFar  = max(tMin, tMax);
+                float3 tFar = max(tMin, tMax);
 
-                // We want the nearest far-plane hit (first interior wall)
-                float t = min(tFar.x, min(tFar.y, tFar.z));
+                // Track which axis hits first to avoid float equality comparison
+                int axis = 0;
+                float t = tFar.x;
+                if (tFar.y < t) { t = tFar.y; axis = 1; }
+                if (tFar.z < t) { t = tFar.z; axis = 2; }
 
                 if (t < 0.0)
                 {
@@ -134,13 +142,13 @@ Shader "Custom/HeadlightInteriorMapping"
                 hitPos = rayOrigin + rayDir * t;
 
                 // Determine which face was hit and compute UV
-                if (t == tFar.z)
+                if (axis == 2)
                 {
                     // Back wall
                     hitNormal = float3(0, 0, sign(rayDir.z));
                     hitUV = hitPos.xy / boxScale.xy * 0.5 + 0.5;
                 }
-                else if (t == tFar.x)
+                else if (axis == 0)
                 {
                     // Side wall
                     hitNormal = float3(sign(rayDir.x), 0, 0);
@@ -156,8 +164,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
-            // Procedural kamaboko facet normal
-            float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength, float3 baseNormal)
+            // Procedural kamaboko facet normal (tangent-space, z-forward)
+            float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
                 float2 cell = frac(uv * facetCount);
                 float3 facetN;
@@ -176,7 +184,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 1. Lens surface lighting (smooth)
                 // ==========================================
                 // Simple directional spec using view reflection against a fixed light
-                float3 lightDir = normalize(float3(0.3, 0.5, 1.0));
+                float3 lightDir = normalize(float3(0.3, 0.5, 1.0)); // normalized at compile time
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity;
@@ -185,14 +193,20 @@ Shader "Custom/HeadlightInteriorMapping"
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
                 float fresnel = pow(1.0 - NdotV, _FresnelPower) * _FresnelIntensity;
 
+                // Lens surface reflection probe
+                float3 lensReflDir = reflect(-worldViewDir, worldNormal);
+                float lensMip = _LensRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                float4 lensEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, lensReflDir, lensMip);
+                float3 lensEnvColor = DecodeHDR(lensEnvSample, unity_SpecCube0_HDR);
+
                 // ==========================================
                 // 2. Lens flute refraction for interior ray
                 // ==========================================
                 float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uv));
-                // Build TBN in object space for refraction
-                float3 objNormal = normalize(mul((float3x3)unity_WorldToObject, worldNormal));
-                float3 objTangent = normalize(mul((float3x3)unity_WorldToObject, normalize(i.worldTangent)));
-                float3 objBitangent = normalize(mul((float3x3)unity_WorldToObject, normalize(i.worldBitangent)));
+                // TBN already in object space from vertex shader
+                float3 objTangent = normalize(i.objTangent);
+                float3 objBitangent = normalize(i.objBitangent);
+                float3 objNormal = normalize(i.objNormal);
 
                 float3 lensNormalOS = normalize(
                     objTangent * lensNormalTS.x +
@@ -201,8 +215,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 );
 
                 // Refract view direction by flute normal
+                // Negate: objectViewDir points toward camera; interior ray must go into the surface
                 float3 objViewDir = normalize(i.objectViewDir);
-                float3 interiorRay = normalize(objViewDir + lensNormalOS * _RefractionStrength);
+                float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
 
                 // ==========================================
                 // 3. Interior Mapping (box)
@@ -223,7 +238,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 if (hit)
                 {
                     // Procedural facet normal (in box-local space, perturbing the hit normal)
-                    float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength, hitNormal);
+                    float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
 
                     // Transform facet normal to world space for matcap lookup
                     // Blend facet perturbation with the actual hit wall normal
@@ -235,15 +250,12 @@ Shader "Custom/HeadlightInteriorMapping"
 
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormal));
 
-                    // MatCap UV from world-space normal
-                    float3 viewCross = cross(worldViewDir, float3(0, 1, 0));
-                    float3 viewUp = cross(viewCross, worldViewDir);
-                    float2 matCapUV;
-                    matCapUV.x = dot(normalize(viewCross), worldPerturbedN) * 0.5 + 0.5;
-                    matCapUV.y = dot(normalize(viewUp), worldPerturbedN) * 0.5 + 0.5;
-
-                    float3 matCapColor = tex2D(_MatCap, matCapUV).rgb;
-                    interiorColor = matCapColor * _ReflectorBrightness;
+                    // Sample reflection probe with perturbed reflector normal
+                    float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
+                    float mip = _ReflectorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
+                    float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
+                    interiorColor = envColor * _ReflectorBrightness;
 
                     // ==========================================
                     // 5. Bulb emission (reflection only)
@@ -264,7 +276,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 finalColor = interiorColor;
                 // Add lens specular and fresnel on top
                 finalColor += specular;
-                finalColor += fresnel * 0.5; // subtle fresnel reflection
+                finalColor += fresnel * lensEnvColor;
 
                 fixed4 col = fixed4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
