@@ -44,7 +44,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _LensNormal:
-        m_Texture: {fileID: 2800000, guid: 0890e51cfadba504ea0a7e4695373103, type: 3}
+        m_Texture: {fileID: 2800000, guid: 9fa4423b19c98654eab824c35df267d4, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
@@ -74,13 +74,15 @@ Material:
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _EmissionIntensity: 10
-    - _EmissionSharpness: 7.6
+    - _EmissionSharpness: 1
     - _FacetStrength: 0.5
-    - _FresnelIntensity: 0.356
-    - _FresnelPower: 2.21
+    - _FresnelIntensity: 1
+    - _FresnelPower: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _HousingRoughness: 0.493
+    - _LensRoughness: 0.038
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
@@ -90,8 +92,8 @@ Material:
     - _RefractionStrength: 0.3
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
-    - _SpecularIntensity: 1.08
-    - _SpecularPower: 67
+    - _SpecularIntensity: 0.83
+    - _SpecularPower: 14
     - _SrcBlend: 1
     - _UVSec: 0
     - _ZWrite: 1
@@ -100,6 +102,6 @@ Material:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
     - _FacetCount: {r: 10, g: 5, b: 0, a: 0}
-    - _HousingColor: {r: 0.02, g: 0.02, b: 0.02, a: 1}
+    - _HousingColor: {r: 1, g: 1, b: 1, a: 1}
     - _Scale: {r: 0.5, g: 0.5, b: 0.3, a: 0}
   m_BuildTextureStacks: []
