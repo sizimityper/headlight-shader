@@ -7,6 +7,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
         _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
         _FresnelIntensity ("Fresnel Intensity", Range(0, 1)) = 0.5
+        _LensRoughness ("Lens Roughness", Range(0, 1)) = 0.0
 
         [Header(Lens Flute Refraction)]
         _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
@@ -77,6 +78,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _SpecularIntensity;
             float _FresnelPower;
             float _FresnelIntensity;
+            float _LensRoughness;
             float _RefractionStrength;
 
             float4 _Scale;
@@ -191,6 +193,12 @@ Shader "Custom/HeadlightInteriorMapping"
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
                 float fresnel = pow(1.0 - NdotV, _FresnelPower) * _FresnelIntensity;
 
+                // Lens surface reflection probe
+                float3 lensReflDir = reflect(-worldViewDir, worldNormal);
+                float lensMip = _LensRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                float4 lensEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, lensReflDir, lensMip);
+                float3 lensEnvColor = DecodeHDR(lensEnvSample, unity_SpecCube0_HDR);
+
                 // ==========================================
                 // 2. Lens flute refraction for interior ray
                 // ==========================================
@@ -268,7 +276,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 finalColor = interiorColor;
                 // Add lens specular and fresnel on top
                 finalColor += specular;
-                finalColor += fresnel;
+                finalColor += fresnel * lensEnvColor;
 
                 fixed4 col = fixed4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
