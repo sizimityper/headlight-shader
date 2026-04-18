@@ -16,6 +16,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Interior Mapping)]
         _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
+        _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
         [Header(Reflector)]
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
@@ -85,6 +86,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float4 _Scale;
             float _InteriorBlur;
+            float _InteriorBlurScale;
             float4 _FacetCount;
             float _FacetStrength;
             float _ReflectorRoughness;
@@ -223,8 +225,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objViewDir = normalize(i.objectViewDir);
                 float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
 
-                // オブジェクト空間座標ベースのハッシュノイズでレイを微小偏向させ箱のエッジをぼかす
-                float2 seed = i.objectPos.xy;
+                // グリッド量子化したハッシュノイズでレイを偏向させ箱のエッジをぼかす
+                // _InteriorBlurScale でグリッドサイズ（＝粒の大きさ）を制御する
+                float2 seed = floor(i.objectPos.xy * _InteriorBlurScale);
                 float blurX = (frac(sin(dot(seed, float2(127.1, 311.7))) * 43758.5) - 0.5);
                 float blurY = (frac(sin(dot(seed, float2(269.5, 183.3))) * 43758.5) - 0.5);
                 interiorRay = normalize(interiorRay + float3(blurX, blurY, 0) * _InteriorBlur);
