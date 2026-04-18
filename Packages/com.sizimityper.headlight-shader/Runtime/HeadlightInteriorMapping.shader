@@ -159,8 +159,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
-            // Procedural kamaboko facet normal
-            float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength, float3 baseNormal)
+            // Procedural kamaboko facet normal (tangent-space, z-forward)
+            float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
                 float2 cell = frac(uv * facetCount);
                 float3 facetN;
@@ -226,7 +226,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 if (hit)
                 {
                     // Procedural facet normal (in box-local space, perturbing the hit normal)
-                    float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength, hitNormal);
+                    float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
 
                     // Transform facet normal to world space for matcap lookup
                     // Blend facet perturbation with the actual hit wall normal
@@ -238,13 +238,8 @@ Shader "Custom/HeadlightInteriorMapping"
 
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormal));
 
-                    // MatCap UV from world-space normal — avoid gimbal lock when view is near vertical
-                    float3 refUp = (abs(worldViewDir.y) < 0.99) ? float3(0, 1, 0) : float3(1, 0, 0);
-                    float3 viewCross = cross(worldViewDir, refUp);
-                    float3 viewUp = cross(viewCross, worldViewDir);
-                    float2 matCapUV;
-                    matCapUV.x = dot(normalize(viewCross), worldPerturbedN) * 0.5 + 0.5;
-                    matCapUV.y = dot(normalize(viewUp), worldPerturbedN) * 0.5 + 0.5;
+                    // MatCap UV: project world-space normal into view space via view matrix
+                    float2 matCapUV = mul((float3x3)UNITY_MATRIX_V, worldPerturbedN).xy * 0.5 + 0.5;
 
                     float3 matCapColor = tex2D(_MatCap, matCapUV).rgb;
                     interiorColor = matCapColor * _ReflectorBrightness;
