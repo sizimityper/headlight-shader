@@ -30,6 +30,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
         [Header(Housing)]
         _HousingColor ("Housing Color", Color) = (0.02, 0.02, 0.02, 1)
+        _HousingRoughness ("Housing Roughness", Range(0, 1)) = 0.6
     }
 
     SubShader
@@ -93,6 +94,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _EmissionSharpness;
 
             float4 _HousingColor;
+            float _HousingRoughness;
 
             v2f vert(appdata v)
             {
@@ -267,7 +269,12 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
                 else
                 {
-                    interiorColor = _HousingColor.rgb;
+                    // ハウジング：メタル質感（反射プローブ × カラーテント）
+                    float3 housingReflDir = reflect(-worldViewDir, worldNormal);
+                    float housingMip = _HousingRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
+                    float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
+                    interiorColor = housingEnvColor * _HousingColor.rgb;
                 }
 
                 // ==========================================
