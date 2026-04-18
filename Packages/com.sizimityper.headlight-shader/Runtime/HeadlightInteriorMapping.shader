@@ -16,9 +16,9 @@ Shader "Custom/HeadlightInteriorMapping"
         _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
 
         [Header(Reflector)]
-        _MatCap ("MatCap", 2D) = "white" {}
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
+        _ReflectorRoughness ("Reflector Roughness", Range(0, 1)) = 0.0
         _ReflectorBrightness ("Reflector Brightness", Range(0, 2)) = 1.0
 
         [Header(Bulb Emission)]
@@ -69,7 +69,6 @@ Shader "Custom/HeadlightInteriorMapping"
 
             sampler2D _LensNormal;
             float4 _LensNormal_ST;
-            sampler2D _MatCap;
 
             float _SpecularPower;
             float _SpecularIntensity;
@@ -80,6 +79,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float4 _Scale;
             float4 _FacetCount;
             float _FacetStrength;
+            float _ReflectorRoughness;
             float _ReflectorBrightness;
 
             float4 _BulbPosition;
@@ -238,11 +238,12 @@ Shader "Custom/HeadlightInteriorMapping"
 
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormal));
 
-                    // MatCap UV: project world-space normal into view space via view matrix
-                    float2 matCapUV = mul((float3x3)UNITY_MATRIX_V, worldPerturbedN).xy * 0.5 + 0.5;
-
-                    float3 matCapColor = tex2D(_MatCap, matCapUV).rgb;
-                    interiorColor = matCapColor * _ReflectorBrightness;
+                    // Sample reflection probe with perturbed reflector normal
+                    float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
+                    float mip = _ReflectorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
+                    float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
+                    interiorColor = envColor * _ReflectorBrightness;
 
                     // ==========================================
                     // 5. Bulb emission (reflection only)
