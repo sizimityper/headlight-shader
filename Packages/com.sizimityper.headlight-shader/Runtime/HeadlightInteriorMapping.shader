@@ -223,11 +223,17 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objViewDir = normalize(i.objectViewDir);
                 float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
 
-                // オブジェクト空間座標ベースのハッシュノイズでレイを微小偏向させ箱のエッジをぼかす
-                float2 seed = i.objectPos.xy;
-                float blurX = (frac(sin(dot(seed, float2(127.1, 311.7))) * 43758.5) - 0.5);
-                float blurY = (frac(sin(dot(seed, float2(269.5, 183.3))) * 43758.5) - 0.5);
-                interiorRay = normalize(interiorRay + float3(blurX, blurY, 0) * _InteriorBlur);
+                // バリューノイズ（4点補間）でレイをぼかす：ハッシュより粒感が出ずすりガラス風になる
+                float2 nc = i.objectPos.xy * 4.0;
+                float2 ni = floor(nc);
+                float2 nf = frac(nc);
+                nf = nf * nf * (3.0 - 2.0 * nf); // smoothstep
+                #define H(p) float2(frac(sin(dot(p, float2(127.1,311.7)))*43758.5), \
+                                    frac(sin(dot(p, float2(269.5,183.3)))*43758.5))
+                float2 blurVec = lerp(lerp(H(ni), H(ni+float2(1,0)), nf.x),
+                                      lerp(H(ni+float2(0,1)), H(ni+float2(1,1)), nf.x), nf.y) - 0.5;
+                #undef H
+                interiorRay = normalize(interiorRay + float3(blurVec.x, blurVec.y, 0) * _InteriorBlur);
 
                 // ==========================================
                 // 3. Interior Mapping (box)
