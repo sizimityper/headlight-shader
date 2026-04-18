@@ -44,6 +44,9 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma multi_compile_fog
 
             #include "UnityCG.cginc"
+            #ifndef UNITY_SPECCUBE_LOD_STEPS
+                #define UNITY_SPECCUBE_LOD_STEPS 6
+            #endif
 
             struct appdata
             {
