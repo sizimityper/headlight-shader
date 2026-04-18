@@ -207,8 +207,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 );
 
                 // Refract view direction by flute normal
+                // Negate: objectViewDir points toward camera; interior ray must go into the surface
                 float3 objViewDir = normalize(i.objectViewDir);
-                float3 interiorRay = normalize(objViewDir + lensNormalOS * _RefractionStrength);
+                float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
 
                 // ==========================================
                 // 3. Interior Mapping (box)
