@@ -26,11 +26,13 @@ Shader "Custom/HeadlightInteriorMapping"
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
-        [Header(Reflector)]
+        [Header(Interior)]
+        _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
+        _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
+        _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
+        _InteriorSaturation ("Interior Saturation", Range(0, 2)) = 1.0
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
-        _ReflectorRoughness ("Reflector Roughness", Range(0, 1)) = 0.0
-        _ReflectorBrightness ("Reflector Brightness", Range(0, 2)) = 1.0
 
         [Header(Bulb Emission)]
         _BulbPosition ("Bulb Position (XYZ, Object Space)", Vector) = (0, 0, -0.5, 0)
@@ -38,9 +40,6 @@ Shader "Custom/HeadlightInteriorMapping"
         _EmissionIntensity ("Emission Intensity", Range(0, 10)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
 
-        [Header(Housing)]
-        _HousingColor ("Housing Color", Color) = (0.02, 0.02, 0.02, 1)
-        _HousingRoughness ("Housing Roughness", Range(0, 1)) = 0.6
     }
 
     SubShader
@@ -107,18 +106,17 @@ Shader "Custom/HeadlightInteriorMapping"
             float _ScaleZ;
             float _InteriorBlur;
             float _InteriorBlurScale;
+            float4 _InteriorColor;
+            float _InteriorRoughness;
+            float _InteriorBrightness;
+            float _InteriorSaturation;
             float4 _FacetCount;
             float _FacetStrength;
-            float _ReflectorRoughness;
-            float _ReflectorBrightness;
 
             float4 _BulbPosition;
             float4 _EmissionColor;
             float _EmissionIntensity;
             float _EmissionSharpness;
-
-            float4 _HousingColor;
-            float _HousingRoughness;
 
             v2f vert(appdata v)
             {
@@ -390,10 +388,10 @@ Shader "Custom/HeadlightInteriorMapping"
 
                     // Sample reflection probe with perturbed reflector normal
                     float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
-                    float mip = _ReflectorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float mip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
                     float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
-                    interiorColor = envColor * _ReflectorBrightness;
+                    interiorColor = envColor * _InteriorBrightness * _InteriorColor.rgb;
 
                     // ==========================================
                     // 5. Bulb emission (reflection only)
@@ -405,17 +403,19 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
                 else
                 {
-                    // ハウジング：メタル質感（反射プローブ × カラーテント）
                     float3 housingReflDir = reflect(-worldViewDir, worldNormal);
-                    float housingMip = _HousingRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float housingMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
                     float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
-                    interiorColor = housingEnvColor * _HousingColor.rgb;
+                    interiorColor = housingEnvColor * _InteriorBrightness * _InteriorColor.rgb;
                 }
 
                 // ==========================================
                 // 6. Composite
                 // ==========================================
+                float luma = dot(interiorColor, float3(0.2126, 0.7152, 0.0722));
+                interiorColor = lerp(float3(luma, luma, luma), interiorColor, _InteriorSaturation);
+
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
                 // Add lens specular and fresnel on top
