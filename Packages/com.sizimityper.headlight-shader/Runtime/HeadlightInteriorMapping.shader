@@ -65,6 +65,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             #include "UnityCG.cginc"
             #include "Lighting.cginc"
+            #include "AutoLight.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
                 #define UNITY_SPECCUBE_LOD_STEPS 6
             #endif
@@ -90,6 +91,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
+                SHADOW_COORDS(10)
             };
 
             sampler2D _MainTex;
@@ -148,6 +150,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.objectViewDir = mul((float3x3)unity_WorldToObject, worldViewDir);
 
                 UNITY_TRANSFER_FOG(o, o.pos);
+                TRANSFER_SHADOW(o);
                 return o;
             }
 
@@ -341,7 +344,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // Directional specular using scene main light
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float3 lightColor = _LightColor0.rgb;
-                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
+                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722)) * SHADOW_ATTENUATION(i);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
