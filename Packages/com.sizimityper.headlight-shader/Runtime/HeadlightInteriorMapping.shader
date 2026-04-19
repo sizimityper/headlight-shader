@@ -31,6 +31,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
         [Header(Interior)]
+        _MatCap ("Interior MatCap", 2D) = "white" {}
         _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
         _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
         _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
@@ -123,6 +124,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _ScaleZ;
             float _InteriorBlur;
             float _InteriorBlurScale;
+            sampler2D _MatCap;
             float4 _InteriorColor;
             float _InteriorRoughness;
             float _InteriorBrightness;
@@ -330,6 +332,12 @@ Shader "Custom/HeadlightInteriorMapping"
                 );
             }
 
+            float2 getMatcapUV(float3 worldNorm)
+            {
+                float3 viewN = normalize(mul((float3x3)UNITY_MATRIX_V, worldNorm));
+                return viewN.xy * 0.5 + 0.5;
+            }
+
             // Procedural kamaboko facet normal (tangent-space, z-forward)
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
@@ -355,7 +363,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
+                #if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
+                    float shadowAtten = lightOn;
+                #else
+                    float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
+                #endif
                 float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
@@ -460,10 +472,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
                     float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
                     if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
-                    float3 bulbReflDir = reflect(-worldViewDir, bulbWorldN);
-                    float bulbMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 bulbEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, bulbReflDir, bulbMip);
-                    float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
+                    float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                     emissionAdd += _InteriorColor.rgb * _EmissionIntensity;
@@ -483,11 +492,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
-                    // Sample reflection probe with perturbed reflector normal
-                    float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
-                    float mip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
-                    float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
+                    // Sample MatCap with perturbed reflector normal
+                    float3 envColor = tex2D(_MatCap, getMatcapUV(worldPerturbedN)).rgb;
                     float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
 
@@ -501,10 +507,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
                 else
                 {
-                    float3 housingReflDir = reflect(-worldViewDir, worldNormal);
-                    float housingMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
-                    float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
+                    float3 housingEnvColor = tex2D(_MatCap, getMatcapUV(worldNormal)).rgb;
                     float housingLuma = dot(housingEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                 }
