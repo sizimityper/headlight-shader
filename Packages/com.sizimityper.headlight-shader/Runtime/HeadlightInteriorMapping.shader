@@ -3,6 +3,8 @@ Shader "Custom/HeadlightInteriorMapping"
     Properties
     {
         [Header(Lens Surface)]
+        _MainTex ("Base Color (RGB)", 2D) = "white" {}
+        _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
         _SpecularPower ("Specular Power", Range(1, 256)) = 64
         _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
         _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
@@ -11,28 +13,37 @@ Shader "Custom/HeadlightInteriorMapping"
 
         [Header(Lens Flute Refraction)]
         _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
-        _RefractionStrength ("Refraction Strength", Range(0, 0.3)) = 0.05
+        _RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.05
 
         [Header(Interior Mapping)]
-        _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
+        _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
+        _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
+        _ScaleX ("Box Scale X", Range(0.001, 0.5)) = 0.1
+        _ScaleY ("Box Scale Y", Range(0.001, 0.5)) = 0.1
+        _ScaleZ ("Box Scale Z", Range(0.001, 0.5)) = 0.1
+        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
+        _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
-        [Header(Reflector)]
+        [Header(Interior)]
+        _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
+        _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
+        _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
+        _InteriorSaturation ("Interior Saturation", Range(0, 2)) = 1.0
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
-        _ReflectorRoughness ("Reflector Roughness", Range(0, 1)) = 0.0
-        _ReflectorBrightness ("Reflector Brightness", Range(0, 2)) = 1.0
 
-        [Header(Bulb Emission)]
+        [Header(Bulb)]
         _BulbPosition ("Bulb Position (XYZ, Object Space)", Vector) = (0, 0, -0.5, 0)
+        _BulbRotation ("Bulb Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
+        _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
+        _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
+        [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
         _EmissionColor ("Emission Color", Color) = (1, 0.95, 0.8, 1)
         _EmissionIntensity ("Emission Intensity", Range(0, 10)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
 
-        [Header(Housing)]
-        _HousingColor ("Housing Color", Color) = (0.02, 0.02, 0.02, 1)
-        _HousingRoughness ("Housing Roughness", Range(0, 1)) = 0.6
     }
 
     SubShader
@@ -46,6 +57,8 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma target 3.0
+            #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
             #include "UnityCG.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
@@ -64,6 +77,7 @@ Shader "Custom/HeadlightInteriorMapping"
             {
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
+                float2 uvMain : TEXCOORD9;
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
                 float3 objTangent : TEXCOORD3;
@@ -73,6 +87,10 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
             };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            float _BaseColorStrength;
 
             sampler2D _LensNormal;
             float4 _LensNormal_ST;
@@ -84,27 +102,36 @@ Shader "Custom/HeadlightInteriorMapping"
             float _LensRoughness;
             float _RefractionStrength;
 
-            float4 _Scale;
+            float _FilletRadius;
+            float4 _BoxCenter;
+            float4 _BoxRotation;
+            float _ScaleX;
+            float _ScaleY;
+            float _ScaleZ;
             float _InteriorBlur;
             float _InteriorBlurScale;
+            float4 _InteriorColor;
+            float _InteriorRoughness;
+            float _InteriorBrightness;
+            float _InteriorSaturation;
             float4 _FacetCount;
             float _FacetStrength;
-            float _ReflectorRoughness;
-            float _ReflectorBrightness;
 
             float4 _BulbPosition;
+            float4 _BulbRotation;
+            float _BulbBodySize;
+            float _BulbBodyLength;
+            float _BulbFacetN;
             float4 _EmissionColor;
             float _EmissionIntensity;
             float _EmissionSharpness;
-
-            float4 _HousingColor;
-            float _HousingRoughness;
 
             v2f vert(appdata v)
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _LensNormal);
+                o.uvMain = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objNormal = normalize(v.normal);
@@ -170,6 +197,124 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
+            // 2D SDF for regular N-gon (circumradius r)
+            float sdNGon2D(float2 p, float r, int n)
+            {
+                float an = UNITY_PI / float(n);
+                float sector = UNITY_TWO_PI / float(n);
+                float bn = fmod(atan2(p.y, p.x) + UNITY_TWO_PI * 5.0, sector) - an;
+                float2 q = length(p) * float2(cos(bn), abs(sin(bn)));
+                q.x -= r * cos(an);
+                q.y += clamp(-q.y, 0.0, r * sin(an));
+                return length(q) * sign(q.x);
+            }
+
+            // 3D SDF for N-gon capsule (Z-aligned, half-length h, circumradius r)
+            float sdNGonCapsule(float3 p, float r, float h, int n)
+            {
+                float dXY = sdNGon2D(p.xy, r, n);
+                float dZ = max(abs(p.z) - h, 0.0);
+                return length(float2(max(dXY, 0.0), dZ)) + min(dXY, 0.0);
+            }
+
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b + r;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+            }
+
+            bool interiorMappingRoundedBox(float3 rayOrigin, float3 rayDir, float3 halfExtents, float filletR,
+                                           out float3 hitPos, out float3 hitNormal, out float2 hitUV)
+            {
+                if (sdRoundBox(rayOrigin, halfExtents, filletR) >= 0.0)
+                {
+                    hitPos = float3(0, 0, 0); hitNormal = float3(0, 0, 1); hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+
+                float t = 0.0;
+                float3 p = rayOrigin;
+                [loop]
+                for (int i = 0; i < 24; i++)
+                {
+                    float d = sdRoundBox(p, halfExtents, filletR);
+                    if (d >= -0.001) break;
+                    t += -d;
+                    p = rayOrigin + rayDir * t;
+                }
+
+                hitPos = p;
+
+                // Analytical gradient of rounded box SDF
+                float3 q = abs(p) - halfExtents + filletR;
+                float3 m = max(q, 0.0);
+                float3 grad;
+                if (dot(m, m) > 1e-6)
+                    grad = m / length(m);
+                else
+                    grad = float3(q.x >= q.y && q.x >= q.z ? 1.0 : 0.0,
+                                  q.y >  q.x && q.y >= q.z ? 1.0 : 0.0,
+                                  q.z >  q.x && q.z >  q.y ? 1.0 : 0.0);
+                hitNormal = normalize(sign(p) * grad);
+
+                float3 absN = abs(hitNormal);
+                if (absN.z >= absN.x && absN.z >= absN.y)
+                    hitUV = p.xy / halfExtents.xy * 0.5 + 0.5;
+                else if (absN.x >= absN.y)
+                    hitUV = p.zy / halfExtents.zy * 0.5 + 0.5;
+                else
+                    hitUV = p.xz / halfExtents.xz * 0.5 + 0.5;
+
+                return true;
+            }
+
+            // Ellipsoid interior mapping: ray-ellipsoid intersection (ray origin assumed inside)
+            bool interiorMappingEllipsoid(float3 rayOrigin, float3 rayDir, float3 semiAxes,
+                                          out float3 hitPos, out float3 hitNormal, out float2 hitUV)
+            {
+                float3 u = rayOrigin / semiAxes;
+                float3 v = rayDir / semiAxes;
+                float A = dot(v, v);
+                float B = dot(u, v);
+                float C = dot(u, u) - 1.0;
+                float disc = B * B - A * C;
+                if (disc < 0.0)
+                {
+                    hitPos = float3(0, 0, 0);
+                    hitNormal = float3(0, 0, 1);
+                    hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+                float t = (-B + sqrt(disc)) / A;
+                if (t < 0.0)
+                {
+                    hitPos = float3(0, 0, 0);
+                    hitNormal = float3(0, 0, 1);
+                    hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+                hitPos = rayOrigin + rayDir * t;
+                hitNormal = normalize(hitPos / (semiAxes * semiAxes));
+                float3 unitHit = normalize(hitPos / semiAxes);
+                hitUV = float2(atan2(unitHit.x, unitHit.z) / (2.0 * UNITY_PI) + 0.5,
+                               unitHit.y * 0.5 + 0.5);
+                return true;
+            }
+
+            // Rotation matrix from XYZ Euler degrees (Rz*Ry*Rx order)
+            float3x3 boxRotationMatrix(float3 eulerDeg)
+            {
+                float3 r = eulerDeg * (UNITY_PI / 180.0);
+                float cx = cos(r.x), sx = sin(r.x);
+                float cy = cos(r.y), sy = sin(r.y);
+                float cz = cos(r.z), sz = sin(r.z);
+                return float3x3(
+                    cz*cy,  cz*sy*sx - sz*cx,  cz*sy*cx + sz*sx,
+                    sz*cy,  sz*sy*sx + cz*cx,  sz*sy*cx - cz*sx,
+                      -sy,           cy*sx,             cy*cx
+                );
+            }
+
             // Procedural kamaboko facet normal (tangent-space, z-forward)
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
@@ -214,16 +359,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objBitangent = normalize(i.objBitangent);
                 float3 objNormal = normalize(i.objNormal);
 
-                float3 lensNormalOS = normalize(
-                    objTangent * lensNormalTS.x +
-                    objBitangent * lensNormalTS.y +
-                    objNormal * lensNormalTS.z
-                );
-
-                // Refract view direction by flute normal
+                // Refract view direction by flute normal (tangential components only)
                 // Negate: objectViewDir points toward camera; interior ray must go into the surface
                 float3 objViewDir = normalize(i.objectViewDir);
-                float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
+                float3 lensOffset = (objTangent * lensNormalTS.x + objBitangent * lensNormalTS.y) * _RefractionStrength;
+                float3 interiorRay = normalize(-objViewDir + lensOffset);
 
                 // グリッド量子化したハッシュノイズでレイを偏向させ箱のエッジをぼかす
                 // _InteriorBlurScale でグリッドサイズ（＝粒の大きさ）を制御する
@@ -235,25 +375,82 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 3. Interior Mapping (box)
                 // ==========================================
-                float3 boxScale = _Scale.xyz;
+                float3 boxScale = float3(_ScaleX, _ScaleY, _ScaleZ);
+                float3x3 rot = boxRotationMatrix(_BoxRotation.xyz);
+                float3 localRayOrigin = mul(rot, i.objectPos - _BoxCenter.xyz);
+                float3 localInteriorRay = mul(rot, interiorRay);
                 float3 hitPos;
                 float3 hitNormal;
                 float2 hitUV;
 
-                bool hit = interiorMapping(i.objectPos, interiorRay, boxScale,
+                #if _INTERIORSHAPE_ELLIPSOID
+                bool hit = interiorMappingEllipsoid(localRayOrigin, localInteriorRay, boxScale,
+                                                    hitPos, hitNormal, hitUV);
+                #elif _INTERIORSHAPE_ROUNDEDBOX
+                bool hit = interiorMappingRoundedBox(localRayOrigin, localInteriorRay, boxScale, _FilletRadius,
+                                                     hitPos, hitNormal, hitUV);
+                #else
+                bool hit = interiorMapping(localRayOrigin, localInteriorRay, boxScale,
                                            hitPos, hitNormal, hitUV);
+                #endif
+
+                // Bulb body: N-gon capsule via SDF sphere tracing
+                float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
+                int bulbN = int(round(_BulbFacetN));
+                float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
+                float bulbT = 0.0;
+                bool bulbHit = false;
+                float3 bulbHitNormal = float3(0, 0, 1);
+                float maxBulbDist = length(boxScale) * 3.0;
+                [loop]
+                for (int bi = 0; bi < 24; bi++)
+                {
+                    float3 bp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    float bd = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, bulbN);
+                    if (bd < 0.001) { bulbHit = true; break; }
+                    if (bulbT > maxBulbDist) break;
+                    bulbT += bd;
+                }
+                if (bulbHit)
+                {
+                    float3 hp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    float e = 0.001;
+                    float3 bulbGrad = float3(
+                        sdNGonCapsule(hp + float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN),
+                        sdNGonCapsule(hp + float3(0,e,0), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(0,e,0), _BulbBodySize, _BulbBodyLength, bulbN),
+                        sdNGonCapsule(hp + float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN)
+                    );
+                    // Gradient is in bulb-local space → box-local space
+                    bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
+                }
+                float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
                 // ==========================================
                 // 4. Reflector shading
                 // ==========================================
                 float3 interiorColor;
 
-                if (hit)
+                if (bulbHit && bulbT < wallT)
+                {
+                    float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
+                    float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
+                    if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
+                    float3 bulbReflDir = reflect(-worldViewDir, bulbWorldN);
+                    float bulbMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float4 bulbEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, bulbReflDir, bulbMip);
+                    float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
+                    float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
+                    interiorColor += _EmissionColor.rgb * _EmissionIntensity;
+                }
+                else if (hit)
                 {
                     // Procedural facet normal (in box-local space, perturbing the hit normal)
                     float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
 
-                    // Transform facet normal to world space for matcap lookup
                     // Blend facet perturbation with the actual hit wall normal
                     float3 perturbedNormal;
                     perturbedNormal.x = hitNormal.x + facetN.x;
@@ -261,37 +458,40 @@ Shader "Custom/HeadlightInteriorMapping"
                     perturbedNormal.z = hitNormal.z + facetN.z;
                     perturbedNormal = normalize(perturbedNormal);
 
-                    float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormal));
+                    float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
+                    float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
                     // Sample reflection probe with perturbed reflector normal
                     float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
-                    float mip = _ReflectorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float mip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
                     float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
-                    interiorColor = envColor * _ReflectorBrightness;
+                    float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
 
                     // ==========================================
                     // 5. Bulb emission (reflection only)
                     // ==========================================
-                    float3 toBulb = normalize(_BulbPosition.xyz - hitPos);
+                    float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
                     float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
                     interiorColor += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
                 }
                 else
                 {
-                    // ハウジング：メタル質感（反射プローブ × カラーテント）
                     float3 housingReflDir = reflect(-worldViewDir, worldNormal);
-                    float housingMip = _HousingRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float housingMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
                     float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
-                    interiorColor = housingEnvColor * _HousingColor.rgb;
+                    float housingLuma = dot(housingEnvColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                 }
 
                 // ==========================================
                 // 6. Composite
                 // ==========================================
-                float3 finalColor = interiorColor;
+                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
                 // Add lens specular and fresnel on top
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor;

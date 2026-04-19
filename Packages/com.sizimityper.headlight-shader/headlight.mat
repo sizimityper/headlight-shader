@@ -81,14 +81,16 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _HousingRoughness: 0.493
-    - _LensRoughness: 0.038
+    - _HousingRoughness: 0.529
+    - _InteriorBlur: 0.2
+    - _InteriorBlurScale: 14
+    - _LensRoughness: 0.093
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
     - _ReflectorBrightness: 1
-    - _ReflectorRoughness: 0.092
+    - _ReflectorRoughness: 0.126
     - _RefractionStrength: 0.3
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
