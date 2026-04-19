@@ -350,8 +350,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 // Directional specular using scene main light
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float3 lightColor = _LightColor0.rgb;
-                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722)) * lerp(1.0, SHADOW_ATTENUATION(i), _ShadowStrength);
-                lightLuma = max(lightLuma, _MinBrightness);
+                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
+                float shadowFactor = max(lerp(1.0, SHADOW_ATTENUATION(i), _ShadowStrength), _MinBrightness);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
@@ -512,9 +512,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * lightLuma;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor;
                 finalColor += specular;
-                finalColor += fresnel * lensEnvColor * lightLuma;
+                finalColor += fresnel * lensEnvColor * shadowFactor;
                 finalColor += emissionAdd;
 
                 float4 col = float4(finalColor, 1.0);
