@@ -99,6 +99,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
+                SHADOW_COORDS(9)
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -162,6 +163,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.objectViewDir = mul((float3x3)unity_WorldToObject, worldViewDir);
 
                 UNITY_TRANSFER_FOG(o, o.pos);
+                TRANSFER_SHADOW(o);
                 return o;
             }
 
@@ -364,9 +366,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                // スクリーンスペースシャドウはデプスプリパスの問題で誤動作するためスキップ
-                // ヘッドライトは自発光ベースなので影受けは不要
-                float shadowAtten = lightOn;
+                #if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
+                    float shadowAtten = lightOn;
+                #else
+                    float shadowAtten = saturate(SHADOW_ATTENUATION(i)) * lightOn;
+                #endif
                 float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
                 float3 hvec = worldViewDir + lightDir;
                 float3 halfVec = dot(hvec, hvec) > 0.0001 ? normalize(hvec) : worldNormal;
@@ -624,6 +628,48 @@ Shader "Custom/HeadlightInteriorMapping"
             }
             ENDCG
         }
+        Pass
+        {
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ZTest LEqual
+            Cull Back
+
+            CGPROGRAM
+            #pragma vertex vertShadow
+            #pragma fragment fragShadow
+            #pragma multi_compile_shadowcaster
+            #pragma multi_compile_instancing
+            #include "UnityCG.cginc"
+
+            struct appdataShadow
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2fShadow
+            {
+                V2F_SHADOW_CASTER;
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            v2fShadow vertShadow(appdataShadow v)
+            {
+                v2fShadow o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o);
+                return o;
+            }
+
+            float4 fragShadow(v2fShadow i) : SV_Target
+            {
+                SHADOW_CASTER_FRAGMENT(i);
+            }
+            ENDCG
+        }
     }
-    FallBack "Unlit/Color"
+    FallBack Off
 }
