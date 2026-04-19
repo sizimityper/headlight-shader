@@ -58,6 +58,9 @@ Shader "Custom/HeadlightInteriorMapping"
         Pass
         {
             Tags { "LightMode" = "ForwardBase" }
+            ZWrite On
+            ZTest LEqual
+            Cull Back
 
             CGPROGRAM
             #pragma vertex vert
