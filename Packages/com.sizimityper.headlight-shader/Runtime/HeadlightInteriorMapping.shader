@@ -444,6 +444,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
+                    interiorColor += _EmissionColor.rgb * _EmissionIntensity;
                 }
                 else if (hit)
                 {
