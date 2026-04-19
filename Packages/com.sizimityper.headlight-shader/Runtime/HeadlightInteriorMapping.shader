@@ -355,8 +355,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                float shadowAtten = lerp(1.0, SHADOW_ATTENUATION(i), _ShadowStrength * lightOn);
-                float shadowFactor = max(shadowAtten, _MinBrightness);
+                float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
+                float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
