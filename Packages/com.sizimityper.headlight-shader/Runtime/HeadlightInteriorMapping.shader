@@ -18,7 +18,9 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Interior Mapping)]
         _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
         _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
-        _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
+        _ScaleX ("Box Scale X", Range(0.001, 0.5)) = 0.1
+        _ScaleY ("Box Scale Y", Range(0.001, 0.5)) = 0.1
+        _ScaleZ ("Box Scale Z", Range(0.001, 0.5)) = 0.1
         [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
         _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
@@ -100,7 +102,9 @@ Shader "Custom/HeadlightInteriorMapping"
             float _FilletRadius;
             float4 _BoxCenter;
             float4 _BoxRotation;
-            float4 _Scale;
+            float _ScaleX;
+            float _ScaleY;
+            float _ScaleZ;
             float _InteriorBlur;
             float _InteriorBlurScale;
             float4 _FacetCount;
@@ -345,7 +349,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 3. Interior Mapping (box)
                 // ==========================================
-                float3 boxScale = _Scale.xyz;
+                float3 boxScale = float3(_ScaleX, _ScaleY, _ScaleZ);
                 float3x3 rot = boxRotationMatrix(_BoxRotation.xyz);
                 float3 localRayOrigin = mul(rot, i.objectPos - _BoxCenter.xyz);
                 float3 localInteriorRay = mul(rot, interiorRay);
