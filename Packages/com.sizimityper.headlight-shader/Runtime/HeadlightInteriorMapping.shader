@@ -502,9 +502,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
-                finalColor += specular * ambientLuma;
-                finalColor += fresnel * lensEnvColor;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * lightLuma;
+                finalColor += specular;
+                finalColor += fresnel * lensEnvColor * lightLuma;
                 finalColor += emissionAdd;
 
                 float4 col = float4(finalColor, 1.0);
