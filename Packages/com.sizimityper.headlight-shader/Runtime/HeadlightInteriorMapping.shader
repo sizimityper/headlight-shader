@@ -19,6 +19,8 @@ Shader "Custom/HeadlightInteriorMapping"
         _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
         _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
         _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
+        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
+        _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
@@ -51,6 +53,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma target 3.0
+            #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
             #include "UnityCG.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
@@ -94,6 +97,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _LensRoughness;
             float _RefractionStrength;
 
+            float _FilletRadius;
             float4 _BoxCenter;
             float4 _BoxRotation;
             float4 _Scale;
@@ -183,6 +187,90 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b + r;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+            }
+
+            bool interiorMappingRoundedBox(float3 rayOrigin, float3 rayDir, float3 halfExtents, float filletR,
+                                           out float3 hitPos, out float3 hitNormal, out float2 hitUV)
+            {
+                if (sdRoundBox(rayOrigin, halfExtents, filletR) >= 0.0)
+                {
+                    hitPos = float3(0, 0, 0); hitNormal = float3(0, 0, 1); hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+
+                float t = 0.0;
+                float3 p = rayOrigin;
+                [loop]
+                for (int i = 0; i < 24; i++)
+                {
+                    float d = sdRoundBox(p, halfExtents, filletR);
+                    if (d >= -0.001) break;
+                    t += -d;
+                    p = rayOrigin + rayDir * t;
+                }
+
+                hitPos = p;
+
+                // Analytical gradient of rounded box SDF
+                float3 q = abs(p) - halfExtents + filletR;
+                float3 m = max(q, 0.0);
+                float3 grad;
+                if (dot(m, m) > 1e-6)
+                    grad = m / length(m);
+                else
+                    grad = float3(q.x >= q.y && q.x >= q.z ? 1.0 : 0.0,
+                                  q.y >  q.x && q.y >= q.z ? 1.0 : 0.0,
+                                  q.z >  q.x && q.z >  q.y ? 1.0 : 0.0);
+                hitNormal = normalize(sign(p) * grad);
+
+                float3 absN = abs(hitNormal);
+                if (absN.z >= absN.x && absN.z >= absN.y)
+                    hitUV = p.xy / halfExtents.xy * 0.5 + 0.5;
+                else if (absN.x >= absN.y)
+                    hitUV = p.zy / halfExtents.zy * 0.5 + 0.5;
+                else
+                    hitUV = p.xz / halfExtents.xz * 0.5 + 0.5;
+
+                return true;
+            }
+
+            // Ellipsoid interior mapping: ray-ellipsoid intersection (ray origin assumed inside)
+            bool interiorMappingEllipsoid(float3 rayOrigin, float3 rayDir, float3 semiAxes,
+                                          out float3 hitPos, out float3 hitNormal, out float2 hitUV)
+            {
+                float3 u = rayOrigin / semiAxes;
+                float3 v = rayDir / semiAxes;
+                float A = dot(v, v);
+                float B = dot(u, v);
+                float C = dot(u, u) - 1.0;
+                float disc = B * B - A * C;
+                if (disc < 0.0)
+                {
+                    hitPos = float3(0, 0, 0);
+                    hitNormal = float3(0, 0, 1);
+                    hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+                float t = (-B + sqrt(disc)) / A;
+                if (t < 0.0)
+                {
+                    hitPos = float3(0, 0, 0);
+                    hitNormal = float3(0, 0, 1);
+                    hitUV = float2(0.5, 0.5);
+                    return false;
+                }
+                hitPos = rayOrigin + rayDir * t;
+                hitNormal = normalize(hitPos / (semiAxes * semiAxes));
+                float3 unitHit = normalize(hitPos / semiAxes);
+                hitUV = float2(atan2(unitHit.x, unitHit.z) / (2.0 * UNITY_PI) + 0.5,
+                               unitHit.y * 0.5 + 0.5);
+                return true;
+            }
+
             // Rotation matrix from XYZ Euler degrees (Rz*Ry*Rx order)
             float3x3 boxRotationMatrix(float3 eulerDeg)
             {
@@ -265,8 +353,16 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 hitNormal;
                 float2 hitUV;
 
+                #if _INTERIORSHAPE_ELLIPSOID
+                bool hit = interiorMappingEllipsoid(localRayOrigin, localInteriorRay, boxScale,
+                                                    hitPos, hitNormal, hitUV);
+                #elif _INTERIORSHAPE_ROUNDEDBOX
+                bool hit = interiorMappingRoundedBox(localRayOrigin, localInteriorRay, boxScale, _FilletRadius,
+                                                     hitPos, hitNormal, hitUV);
+                #else
                 bool hit = interiorMapping(localRayOrigin, localInteriorRay, boxScale,
                                            hitPos, hitNormal, hitUV);
+                #endif
 
                 // ==========================================
                 // 4. Reflector shading
