@@ -44,7 +44,6 @@ Shader "Custom/HeadlightInteriorMapping"
         _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
         _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
         [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
-        _EmissionColor ("Emission Color", Color) = (1, 0.95, 0.8, 1)
         _EmissionIntensity ("Emission Intensity", Range(0, 50)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
 
@@ -134,7 +133,6 @@ Shader "Custom/HeadlightInteriorMapping"
             float _BulbBodySize;
             float _BulbBodyLength;
             float _BulbFacetN;
-            float4 _EmissionColor;
             float _EmissionIntensity;
             float _EmissionSharpness;
 
@@ -463,7 +461,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
-                    emissionAdd += _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += _InteriorColor.rgb * _EmissionIntensity;
                 }
                 else if (hit)
                 {
@@ -494,7 +492,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
                     float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
-                    emissionAdd += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += bulbSpec * _InteriorColor.rgb * _EmissionIntensity;
                 }
                 else
                 {
