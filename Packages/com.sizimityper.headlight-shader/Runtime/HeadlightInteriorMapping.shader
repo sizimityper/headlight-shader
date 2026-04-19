@@ -2,6 +2,9 @@ Shader "Custom/HeadlightInteriorMapping"
 {
     Properties
     {
+        [Header(Lighting)]
+        _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.5
+
         [Header(Lens Surface)]
         _MainTex ("Base Color (RGB)", 2D) = "white" {}
         _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
@@ -103,6 +106,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float _SpecularPower;
             float _SpecularIntensity;
+            float _ShadowStrength;
             float _FresnelPower;
             float _FresnelIntensity;
             float _LensRoughness;
@@ -344,7 +348,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // Directional specular using scene main light
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float3 lightColor = _LightColor0.rgb;
-                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722)) * SHADOW_ATTENUATION(i);
+                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722)) * lerp(1.0, SHADOW_ATTENUATION(i), _ShadowStrength);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
