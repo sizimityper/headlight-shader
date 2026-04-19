@@ -9,6 +9,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Lens Surface)]
         _MainTex ("Base Color (RGB)", 2D) = "white" {}
         _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
+        _EdgeMask ("Edge Mask (R=trim)", 2D) = "white" {}
         _SpecularPower ("Specular Power", Range(1, 256)) = 64
         _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
         _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
@@ -116,6 +117,8 @@ Shader "Custom/HeadlightInteriorMapping"
             float _MinBrightness;
             float _FresnelPower;
             float _FresnelIntensity;
+            sampler2D _EdgeMask;
+            float4 _EdgeMask_ST;
             float _LensRoughness;
             float _RefractionStrength;
 
@@ -524,10 +527,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
                 float3 baseColor = tex2D(_MainTex, i.uvs.zw).rgb;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor;
+                float edgeMask = tex2D(_EdgeMask, i.uvs.zw).r;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor * edgeMask;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
-                finalColor += emissionAdd;
+                finalColor += emissionAdd * edgeMask;
 
                 // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
                 finalColor = max(finalColor, float3(0, 0, 0));
