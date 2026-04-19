@@ -41,7 +41,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
         [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
         _EmissionColor ("Emission Color", Color) = (1, 0.95, 0.8, 1)
-        _EmissionIntensity ("Emission Intensity", Range(0, 10)) = 0.0
+        _EmissionIntensity ("Emission Intensity", Range(0, 50)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
 
     }
@@ -432,6 +432,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 4. Reflector shading
                 // ==========================================
                 float3 interiorColor;
+                float3 emissionAdd = float3(0, 0, 0);
 
                 if (bulbHit && bulbT < wallT)
                 {
@@ -444,7 +445,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
-                    interiorColor += _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += _EmissionColor.rgb * _EmissionIntensity;
                 }
                 else if (hit)
                 {
@@ -475,7 +476,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
                     float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
-                    interiorColor += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
                 }
                 else
                 {
@@ -492,6 +493,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
+                finalColor += emissionAdd;
                 // Add lens specular and fresnel on top
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor;
