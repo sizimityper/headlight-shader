@@ -11,7 +11,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: 57233ad0d68c487490a346a3b0c93fa1, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _INTERIORSHAPE_BOX
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -52,7 +53,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MatCap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: d0aef23b26875184dbb5426b35458b2f, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
@@ -69,6 +70,10 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BaseColorStrength: 1
+    - _BulbBodyLength: 0.05
+    - _BulbBodySize: 0.02
+    - _BulbFacetN: 8
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
@@ -76,6 +81,7 @@ Material:
     - _EmissionIntensity: 10
     - _EmissionSharpness: 1
     - _FacetStrength: 0.5
+    - _FilletRadius: 0.1
     - _FresnelIntensity: 1
     - _FresnelPower: 1
     - _GlossMapScale: 1
@@ -84,26 +90,41 @@ Material:
     - _HousingRoughness: 0.529
     - _InteriorBlur: 0.2
     - _InteriorBlurScale: 14
+    - _InteriorBrightness: 1
+    - _InteriorRoughness: 0
+    - _InteriorSaturation: 1
+    - _InteriorShape: 0
     - _LensRoughness: 0.093
     - _Metallic: 0
+    - _MinBrightness: 0.1
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
     - _ReflectorBrightness: 1
     - _ReflectorRoughness: 0.126
     - _RefractionStrength: 0.3
+    - _ScaleX: 1
+    - _ScaleY: 0.5
+    - _ScaleZ: 0.8
+    - _ShadowStrength: 0.5
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SpecularIntensity: 0.83
     - _SpecularPower: 14
     - _SrcBlend: 1
     - _UVSec: 0
+    - _UseEllipsoid: 0
     - _ZWrite: 1
     m_Colors:
+    - _BoxCenter: {r: 0, g: 0, b: 0, a: 0}
+    - _BoxRotation: {r: 0, g: 0, b: 0, a: 0}
+    - _BulbBodyColor: {r: 0.9, g: 0.9, b: 0.8, a: 1}
     - _BulbPosition: {r: 0, g: 0, b: -0.5, a: 0}
+    - _BulbRotation: {r: 0, g: 0, b: 0, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
     - _FacetCount: {r: 10, g: 5, b: 0, a: 0}
     - _HousingColor: {r: 1, g: 1, b: 1, a: 1}
+    - _InteriorColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
     - _Scale: {r: 0.5, g: 0.5, b: 0.3, a: 0}
   m_BuildTextureStacks: []
