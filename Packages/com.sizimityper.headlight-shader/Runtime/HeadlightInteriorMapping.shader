@@ -491,12 +491,14 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 6. Composite
                 // ==========================================
+                // Ambient from spherical harmonics — makes shader respond to world lighting
+                float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
+                float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
+
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
+                float3 finalColor = (interiorColor * lerp(1.0, baseColor, _BaseColorStrength)
+                                    + specular + fresnel * lensEnvColor) * ambientLuma;
                 finalColor += emissionAdd;
-                // Add lens specular and fresnel on top
-                finalColor += specular;
-                finalColor += fresnel * lensEnvColor;
 
                 float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
