@@ -31,6 +31,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
         [Header(Interior)]
+        _MatCap ("Interior MatCap", 2D) = "white" {}
         _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
         _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
         _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
@@ -57,12 +58,16 @@ Shader "Custom/HeadlightInteriorMapping"
         Pass
         {
             Tags { "LightMode" = "ForwardBase" }
+            ZWrite On
+            ZTest LEqual
+            Cull Back
 
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma multi_compile_fwdbase
+            #pragma multi_compile_instancing
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
@@ -79,13 +84,13 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 normal : NORMAL;
                 float4 tangent : TANGENT;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float2 uv : TEXCOORD0;
-                float2 uvMain : TEXCOORD9;
+                float4 uvs : TEXCOORD0;     // xy=lensNormal, zw=mainTex
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
                 float3 objTangent : TEXCOORD3;
@@ -94,7 +99,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
-                SHADOW_COORDS(10)
+                SHADOW_COORDS(9)
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             sampler2D _MainTex;
@@ -121,6 +127,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _ScaleZ;
             float _InteriorBlur;
             float _InteriorBlurScale;
+            sampler2D _MatCap;
             float4 _InteriorColor;
             float _InteriorRoughness;
             float _InteriorBrightness;
@@ -139,9 +146,11 @@ Shader "Custom/HeadlightInteriorMapping"
             v2f vert(appdata v)
             {
                 v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _LensNormal);
-                o.uvMain = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uvs.xy = TRANSFORM_TEX(v.uv, _LensNormal);
+                o.uvs.zw = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objNormal = normalize(v.normal);
@@ -326,6 +335,12 @@ Shader "Custom/HeadlightInteriorMapping"
                 );
             }
 
+            float2 getMatcapUV(float3 worldNorm)
+            {
+                float3 viewN = normalize(mul((float3x3)UNITY_MATRIX_V, worldNorm));
+                return viewN.xy * 0.5 + 0.5;
+            }
+
             // Procedural kamaboko facet normal (tangent-space, z-forward)
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
@@ -339,6 +354,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float4 frag(v2f i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
 
@@ -346,13 +362,18 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 1. Lens surface lighting (smooth)
                 // ==========================================
                 // Directional specular using scene main light
-                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz + float3(0, 1e-6, 0));
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
+                #if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
+                    float shadowAtten = lightOn;
+                #else
+                    float shadowAtten = saturate(SHADOW_ATTENUATION(i)) * lightOn;
+                #endif
                 float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
-                float3 halfVec = normalize(worldViewDir + lightDir);
+                float3 hvec = worldViewDir + lightDir;
+                float3 halfVec = dot(hvec, hvec) > 0.0001 ? normalize(hvec) : worldNormal;
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
 
@@ -369,7 +390,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 2. Lens flute refraction for interior ray
                 // ==========================================
-                float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uv));
+                float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uvs.xy));
                 // TBN already in object space from vertex shader
                 float3 objTangent = normalize(i.objTangent);
                 float3 objBitangent = normalize(i.objBitangent);
@@ -455,10 +476,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
                     float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
                     if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
-                    float3 bulbReflDir = reflect(-worldViewDir, bulbWorldN);
-                    float bulbMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 bulbEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, bulbReflDir, bulbMip);
-                    float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
+                    float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                     emissionAdd += _InteriorColor.rgb * _EmissionIntensity;
@@ -478,11 +496,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
-                    // Sample reflection probe with perturbed reflector normal
-                    float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
-                    float mip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
-                    float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
+                    // Sample MatCap with perturbed reflector normal
+                    float3 envColor = tex2D(_MatCap, getMatcapUV(worldPerturbedN)).rgb;
                     float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
 
@@ -496,10 +511,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
                 else
                 {
-                    float3 housingReflDir = reflect(-worldViewDir, worldNormal);
-                    float housingMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
-                    float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
-                    float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
+                    float3 housingEnvColor = tex2D(_MatCap, getMatcapUV(worldNormal)).rgb;
                     float housingLuma = dot(housingEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                 }
@@ -511,12 +523,14 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
-                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
+                float3 baseColor = tex2D(_MainTex, i.uvs.zw).rgb;
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
                 finalColor += emissionAdd;
 
+                // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
+                finalColor = max(finalColor, float3(0, 0, 0));
                 float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return col;
@@ -534,6 +548,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma fragment fragAdd
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
             #pragma target 3.0
 
             #include "UnityCG.cginc"
@@ -544,6 +559,7 @@ Shader "Custom/HeadlightInteriorMapping"
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2fAdd
@@ -553,6 +569,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 worldNormal : TEXCOORD1;
                 UNITY_FOG_COORDS(2)
                 LIGHTING_COORDS(3, 4)
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             float _SpecularPower;
@@ -565,6 +582,8 @@ Shader "Custom/HeadlightInteriorMapping"
             v2fAdd vertAdd(appdataAdd v)
             {
                 v2fAdd o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
@@ -575,6 +594,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float4 fragAdd(v2fAdd i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
 
@@ -608,6 +628,48 @@ Shader "Custom/HeadlightInteriorMapping"
             }
             ENDCG
         }
+        Pass
+        {
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ZTest LEqual
+            Cull Back
+
+            CGPROGRAM
+            #pragma vertex vertShadow
+            #pragma fragment fragShadow
+            #pragma multi_compile_shadowcaster
+            #pragma multi_compile_instancing
+            #include "UnityCG.cginc"
+
+            struct appdataShadow
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2fShadow
+            {
+                V2F_SHADOW_CASTER;
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            v2fShadow vertShadow(appdataShadow v)
+            {
+                v2fShadow o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o);
+                return o;
+            }
+
+            float4 fragShadow(v2fShadow i) : SV_Target
+            {
+                SHADOW_CASTER_FRAGMENT(i);
+            }
+            ENDCG
+        }
     }
-    FallBack "Unlit/Color"
+    FallBack Off
 }
