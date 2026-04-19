@@ -2,6 +2,10 @@ Shader "Custom/HeadlightInteriorMapping"
 {
     Properties
     {
+        [Header(Lighting)]
+        _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.5
+        _MinBrightness ("Min Brightness", Range(0, 1)) = 0.1
+
         [Header(Lens Surface)]
         _MainTex ("Base Color (RGB)", 2D) = "white" {}
         _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
@@ -40,8 +44,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
         _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
         [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
-        _EmissionColor ("Emission Color", Color) = (1, 0.95, 0.8, 1)
-        _EmissionIntensity ("Emission Intensity", Range(0, 10)) = 0.0
+        _EmissionIntensity ("Emission Intensity", Range(0, 50)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
 
     }
@@ -53,14 +56,19 @@ Shader "Custom/HeadlightInteriorMapping"
 
         Pass
         {
+            Tags { "LightMode" = "ForwardBase" }
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile_fwdbase
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
             #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
                 #define UNITY_SPECCUBE_LOD_STEPS 6
             #endif
@@ -86,6 +94,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
+                SHADOW_COORDS(10)
             };
 
             sampler2D _MainTex;
@@ -97,6 +106,8 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float _SpecularPower;
             float _SpecularIntensity;
+            float _ShadowStrength;
+            float _MinBrightness;
             float _FresnelPower;
             float _FresnelIntensity;
             float _LensRoughness;
@@ -122,7 +133,6 @@ Shader "Custom/HeadlightInteriorMapping"
             float _BulbBodySize;
             float _BulbBodyLength;
             float _BulbFacetN;
-            float4 _EmissionColor;
             float _EmissionIntensity;
             float _EmissionSharpness;
 
@@ -144,6 +154,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.objectViewDir = mul((float3x3)unity_WorldToObject, worldViewDir);
 
                 UNITY_TRANSFER_FOG(o, o.pos);
+                TRANSFER_SHADOW(o);
                 return o;
             }
 
@@ -326,7 +337,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return normalize(facetN);
             }
 
-            fixed4 frag(v2f i) : SV_Target
+            float4 frag(v2f i) : SV_Target
             {
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
@@ -334,11 +345,16 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 1. Lens surface lighting (smooth)
                 // ==========================================
-                // Simple directional spec using view reflection against a fixed light
-                float3 lightDir = normalize(float3(0.3, 0.5, 1.0)); // normalized at compile time
+                // Directional specular using scene main light
+                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+                float3 lightColor = _LightColor0.rgb;
+                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
+                float lightOn = step(0.001, lightLuma);
+                float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
+                float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
-                float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity;
+                float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
 
                 // Fresnel
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
@@ -432,6 +448,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 4. Reflector shading
                 // ==========================================
                 float3 interiorColor;
+                float3 emissionAdd = float3(0, 0, 0);
 
                 if (bulbHit && bulbT < wallT)
                 {
@@ -444,7 +461,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
-                    interiorColor += _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += _InteriorColor.rgb * _EmissionIntensity;
                 }
                 else if (hit)
                 {
@@ -475,7 +492,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
                     float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
-                    interiorColor += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
+                    emissionAdd += bulbSpec * _InteriorColor.rgb * _EmissionIntensity;
                 }
                 else
                 {
@@ -490,13 +507,102 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 6. Composite
                 // ==========================================
-                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
-                // Add lens specular and fresnel on top
-                finalColor += specular;
-                finalColor += fresnel * lensEnvColor;
+                // Scale hardcoded specular by SH ambient so it fades in dark environments
+                float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
+                float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
-                fixed4 col = fixed4(finalColor, 1.0);
+                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor;
+                finalColor += specular;
+                finalColor += fresnel * lensEnvColor * shadowFactor;
+                finalColor += emissionAdd;
+
+                float4 col = float4(finalColor, 1.0);
+                UNITY_APPLY_FOG(i.fogCoord, col);
+                return col;
+            }
+            ENDCG
+        }
+        Pass
+        {
+            Tags { "LightMode" = "ForwardAdd" }
+            Blend One One
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma vertex vertAdd
+            #pragma fragment fragAdd
+            #pragma multi_compile_fwdadd_fullshadows
+            #pragma multi_compile_fog
+            #pragma target 3.0
+
+            #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+            struct appdataAdd
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+
+            struct v2fAdd
+            {
+                float4 pos : SV_POSITION;
+                float3 worldPos : TEXCOORD0;
+                float3 worldNormal : TEXCOORD1;
+                UNITY_FOG_COORDS(2)
+                LIGHTING_COORDS(3, 4)
+            };
+
+            float _SpecularPower;
+            float _SpecularIntensity;
+            float _FresnelPower;
+            float _FresnelIntensity;
+            float4 _InteriorColor;
+            float _InteriorBrightness;
+
+            v2fAdd vertAdd(appdataAdd v)
+            {
+                v2fAdd o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                UNITY_TRANSFER_FOG(o, o.pos);
+                TRANSFER_VERTEX_TO_FRAGMENT(o);
+                return o;
+            }
+
+            float4 fragAdd(v2fAdd i) : SV_Target
+            {
+                float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+                float3 worldNormal = normalize(i.worldNormal);
+
+                #ifdef USING_DIRECTIONAL_LIGHT
+                    float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+                #else
+                    float3 lightDir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+                #endif
+
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+                float3 lightColor = _LightColor0.rgb;
+
+                // Specular highlight on lens surface
+                float3 halfVec = normalize(worldViewDir + lightDir);
+                float NdotH = saturate(dot(worldNormal, halfVec));
+                float spec = pow(NdotH, _SpecularPower) * _SpecularIntensity;
+
+                // Fresnel with additional light
+                float NdotV = saturate(dot(worldNormal, worldViewDir));
+                float fresnel = pow(1.0 - NdotV, _FresnelPower) * _FresnelIntensity;
+
+                // Subtle interior brightening (light passing through lens)
+                float NdotL = saturate(dot(worldNormal, lightDir));
+                float3 interiorAdd = _InteriorColor.rgb * _InteriorBrightness * NdotL * 0.3;
+
+                float3 finalColor = (spec + fresnel + interiorAdd) * lightColor * atten;
+
+                float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return col;
             }
