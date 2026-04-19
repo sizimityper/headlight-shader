@@ -3,6 +3,8 @@ Shader "Custom/HeadlightInteriorMapping"
     Properties
     {
         [Header(Lens Surface)]
+        _MainTex ("Base Color (RGB)", 2D) = "white" {}
+        _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
         _SpecularPower ("Specular Power", Range(1, 256)) = 64
         _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
         _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
@@ -11,9 +13,11 @@ Shader "Custom/HeadlightInteriorMapping"
 
         [Header(Lens Flute Refraction)]
         _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
-        _RefractionStrength ("Refraction Strength", Range(0, 0.3)) = 0.05
+        _RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.05
 
         [Header(Interior Mapping)]
+        _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
+        _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
         _Scale ("Box Scale (XYZ)", Vector) = (1, 0.5, 0.8, 0)
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
@@ -46,6 +50,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma target 3.0
 
             #include "UnityCG.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
@@ -64,6 +69,7 @@ Shader "Custom/HeadlightInteriorMapping"
             {
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
+                float2 uvMain : TEXCOORD9;
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
                 float3 objTangent : TEXCOORD3;
@@ -73,6 +79,10 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
             };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            float _BaseColorStrength;
 
             sampler2D _LensNormal;
             float4 _LensNormal_ST;
@@ -84,6 +94,8 @@ Shader "Custom/HeadlightInteriorMapping"
             float _LensRoughness;
             float _RefractionStrength;
 
+            float4 _BoxCenter;
+            float4 _BoxRotation;
             float4 _Scale;
             float _InteriorBlur;
             float _InteriorBlurScale;
@@ -105,6 +117,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _LensNormal);
+                o.uvMain = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objNormal = normalize(v.normal);
@@ -170,6 +183,20 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
+            // Rotation matrix from XYZ Euler degrees (Rz*Ry*Rx order)
+            float3x3 boxRotationMatrix(float3 eulerDeg)
+            {
+                float3 r = eulerDeg * (UNITY_PI / 180.0);
+                float cx = cos(r.x), sx = sin(r.x);
+                float cy = cos(r.y), sy = sin(r.y);
+                float cz = cos(r.z), sz = sin(r.z);
+                return float3x3(
+                    cz*cy,  cz*sy*sx - sz*cx,  cz*sy*cx + sz*sx,
+                    sz*cy,  sz*sy*sx + cz*cx,  sz*sy*cx - cz*sx,
+                      -sy,           cy*sx,             cy*cx
+                );
+            }
+
             // Procedural kamaboko facet normal (tangent-space, z-forward)
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
@@ -214,16 +241,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objBitangent = normalize(i.objBitangent);
                 float3 objNormal = normalize(i.objNormal);
 
-                float3 lensNormalOS = normalize(
-                    objTangent * lensNormalTS.x +
-                    objBitangent * lensNormalTS.y +
-                    objNormal * lensNormalTS.z
-                );
-
-                // Refract view direction by flute normal
+                // Refract view direction by flute normal (tangential components only)
                 // Negate: objectViewDir points toward camera; interior ray must go into the surface
                 float3 objViewDir = normalize(i.objectViewDir);
-                float3 interiorRay = normalize(-objViewDir + lensNormalOS * _RefractionStrength);
+                float3 lensOffset = (objTangent * lensNormalTS.x + objBitangent * lensNormalTS.y) * _RefractionStrength;
+                float3 interiorRay = normalize(-objViewDir + lensOffset);
 
                 // グリッド量子化したハッシュノイズでレイを偏向させ箱のエッジをぼかす
                 // _InteriorBlurScale でグリッドサイズ（＝粒の大きさ）を制御する
@@ -236,11 +258,14 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 3. Interior Mapping (box)
                 // ==========================================
                 float3 boxScale = _Scale.xyz;
+                float3x3 rot = boxRotationMatrix(_BoxRotation.xyz);
+                float3 localRayOrigin = mul(rot, i.objectPos - _BoxCenter.xyz);
+                float3 localInteriorRay = mul(rot, interiorRay);
                 float3 hitPos;
                 float3 hitNormal;
                 float2 hitUV;
 
-                bool hit = interiorMapping(i.objectPos, interiorRay, boxScale,
+                bool hit = interiorMapping(localRayOrigin, localInteriorRay, boxScale,
                                            hitPos, hitNormal, hitUV);
 
                 // ==========================================
@@ -253,7 +278,6 @@ Shader "Custom/HeadlightInteriorMapping"
                     // Procedural facet normal (in box-local space, perturbing the hit normal)
                     float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
 
-                    // Transform facet normal to world space for matcap lookup
                     // Blend facet perturbation with the actual hit wall normal
                     float3 perturbedNormal;
                     perturbedNormal.x = hitNormal.x + facetN.x;
@@ -261,7 +285,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     perturbedNormal.z = hitNormal.z + facetN.z;
                     perturbedNormal = normalize(perturbedNormal);
 
-                    float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormal));
+                    float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
+                    float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
                     // Sample reflection probe with perturbed reflector normal
                     float3 reflDir = reflect(-worldViewDir, worldPerturbedN);
@@ -273,7 +298,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     // ==========================================
                     // 5. Bulb emission (reflection only)
                     // ==========================================
-                    float3 toBulb = normalize(_BulbPosition.xyz - hitPos);
+                    float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
                     float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
                     interiorColor += bulbSpec * _EmissionColor.rgb * _EmissionIntensity;
@@ -291,7 +316,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 6. Composite
                 // ==========================================
-                float3 finalColor = interiorColor;
+                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
+                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
                 // Add lens specular and fresnel on top
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor;
