@@ -63,6 +63,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma multi_compile_fwdbase
+            #pragma multi_compile_instancing
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
@@ -79,13 +80,13 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 normal : NORMAL;
                 float4 tangent : TANGENT;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float2 uv : TEXCOORD0;
-                float2 uvMain : TEXCOORD9;
+                float4 uvs : TEXCOORD0;     // xy=lensNormal, zw=mainTex
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
                 float3 objTangent : TEXCOORD3;
@@ -94,7 +95,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
-                SHADOW_COORDS(10)
+                SHADOW_COORDS(9)
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             sampler2D _MainTex;
@@ -139,9 +141,11 @@ Shader "Custom/HeadlightInteriorMapping"
             v2f vert(appdata v)
             {
                 v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _LensNormal);
-                o.uvMain = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uvs.xy = TRANSFORM_TEX(v.uv, _LensNormal);
+                o.uvs.zw = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objNormal = normalize(v.normal);
@@ -339,6 +343,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float4 frag(v2f i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
 
@@ -350,8 +355,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
-                float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
+                float shadowAtten = lerp(1.0, SHADOW_ATTENUATION(i), _ShadowStrength * lightOn);
+                float shadowFactor = max(shadowAtten, _MinBrightness);
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
@@ -369,7 +374,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 2. Lens flute refraction for interior ray
                 // ==========================================
-                float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uv));
+                float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uvs.xy));
                 // TBN already in object space from vertex shader
                 float3 objTangent = normalize(i.objTangent);
                 float3 objBitangent = normalize(i.objBitangent);
@@ -511,7 +516,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
-                float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
+                float3 baseColor = tex2D(_MainTex, i.uvs.zw).rgb;
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
@@ -534,6 +539,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma fragment fragAdd
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
             #pragma target 3.0
 
             #include "UnityCG.cginc"
@@ -544,6 +550,7 @@ Shader "Custom/HeadlightInteriorMapping"
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2fAdd
@@ -553,6 +560,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 worldNormal : TEXCOORD1;
                 UNITY_FOG_COORDS(2)
                 LIGHTING_COORDS(3, 4)
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             float _SpecularPower;
@@ -565,6 +573,8 @@ Shader "Custom/HeadlightInteriorMapping"
             v2fAdd vertAdd(appdataAdd v)
             {
                 v2fAdd o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
@@ -575,6 +585,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float4 fragAdd(v2fAdd i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
 
