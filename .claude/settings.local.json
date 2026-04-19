@@ -4,7 +4,9 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(gh pr create --base main --head beta --title 'Fix shader bugs and replace MatCap with reflection probe' --body ' *)"
+      "Bash(gh pr create --base main --head beta --title 'Fix shader bugs and replace MatCap with reflection probe' --body ' *)",
+      "Bash(git revert *)",
+      "Bash(gh pr *)"
     ]
   }
 }
