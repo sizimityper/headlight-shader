@@ -99,7 +99,6 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 objectPos : TEXCOORD6;
                 float3 objectViewDir : TEXCOORD7;
                 UNITY_FOG_COORDS(8)
-                SHADOW_COORDS(9)
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -163,7 +162,6 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.objectViewDir = mul((float3x3)unity_WorldToObject, worldViewDir);
 
                 UNITY_TRANSFER_FOG(o, o.pos);
-                TRANSFER_SHADOW(o);
                 return o;
             }
 
@@ -362,17 +360,16 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 1. Lens surface lighting (smooth)
                 // ==========================================
                 // Directional specular using scene main light
-                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz + float3(0, 1e-6, 0));
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float lightOn = step(0.001, lightLuma);
-                #if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
-                    float shadowAtten = lightOn;
-                #else
-                    float shadowAtten = SHADOW_ATTENUATION(i) * lightOn;
-                #endif
+                // スクリーンスペースシャドウはデプスプリパスの問題で誤動作するためスキップ
+                // ヘッドライトは自発光ベースなので影受けは不要
+                float shadowAtten = lightOn;
                 float shadowFactor = max(lerp(1.0, shadowAtten, _ShadowStrength), _MinBrightness);
-                float3 halfVec = normalize(worldViewDir + lightDir);
+                float3 hvec = worldViewDir + lightDir;
+                float3 halfVec = dot(hvec, hvec) > 0.0001 ? normalize(hvec) : worldNormal;
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
 
@@ -528,6 +525,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 finalColor += fresnel * lensEnvColor * shadowFactor;
                 finalColor += emissionAdd;
 
+                // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
+                finalColor = max(finalColor, float3(0, 0, 0));
                 float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return col;
