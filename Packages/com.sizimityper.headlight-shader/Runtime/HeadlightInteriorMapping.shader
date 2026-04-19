@@ -34,8 +34,12 @@ Shader "Custom/HeadlightInteriorMapping"
         _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
 
-        [Header(Bulb Emission)]
+        [Header(Bulb)]
         _BulbPosition ("Bulb Position (XYZ, Object Space)", Vector) = (0, 0, -0.5, 0)
+        _BulbRotation ("Bulb Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
+        _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
+        _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
+        [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
         _EmissionColor ("Emission Color", Color) = (1, 0.95, 0.8, 1)
         _EmissionIntensity ("Emission Intensity", Range(0, 10)) = 0.0
         _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
@@ -114,6 +118,10 @@ Shader "Custom/HeadlightInteriorMapping"
             float _FacetStrength;
 
             float4 _BulbPosition;
+            float4 _BulbRotation;
+            float _BulbBodySize;
+            float _BulbBodyLength;
+            float _BulbFacetN;
             float4 _EmissionColor;
             float _EmissionIntensity;
             float _EmissionSharpness;
@@ -187,6 +195,26 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
 
                 return true;
+            }
+
+            // 2D SDF for regular N-gon (circumradius r)
+            float sdNGon2D(float2 p, float r, int n)
+            {
+                float an = UNITY_PI / float(n);
+                float sector = UNITY_TWO_PI / float(n);
+                float bn = fmod(atan2(p.y, p.x) + UNITY_TWO_PI * 5.0, sector) - an;
+                float2 q = length(p) * float2(cos(bn), abs(sin(bn)));
+                q.x -= r * cos(an);
+                q.y += clamp(-q.y, 0.0, r * sin(an));
+                return length(q) * sign(q.x);
+            }
+
+            // 3D SDF for N-gon capsule (Z-aligned, half-length h, circumradius r)
+            float sdNGonCapsule(float3 p, float r, float h, int n)
+            {
+                float dXY = sdNGon2D(p.xy, r, n);
+                float dZ = max(abs(p.z) - h, 0.0);
+                return length(float2(max(dXY, 0.0), dZ)) + min(dXY, 0.0);
             }
 
             float sdRoundBox(float3 p, float3 b, float r)
@@ -366,12 +394,58 @@ Shader "Custom/HeadlightInteriorMapping"
                                            hitPos, hitNormal, hitUV);
                 #endif
 
+                // Bulb body: N-gon capsule via SDF sphere tracing
+                float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
+                int bulbN = int(round(_BulbFacetN));
+                float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
+                float bulbT = 0.0;
+                bool bulbHit = false;
+                float3 bulbHitNormal = float3(0, 0, 1);
+                float maxBulbDist = length(boxScale) * 3.0;
+                [loop]
+                for (int bi = 0; bi < 24; bi++)
+                {
+                    float3 bp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    float bd = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, bulbN);
+                    if (bd < 0.001) { bulbHit = true; break; }
+                    if (bulbT > maxBulbDist) break;
+                    bulbT += bd;
+                }
+                if (bulbHit)
+                {
+                    float3 hp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    float e = 0.001;
+                    float3 bulbGrad = float3(
+                        sdNGonCapsule(hp + float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN),
+                        sdNGonCapsule(hp + float3(0,e,0), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(0,e,0), _BulbBodySize, _BulbBodyLength, bulbN),
+                        sdNGonCapsule(hp + float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN) -
+                        sdNGonCapsule(hp - float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN)
+                    );
+                    // Gradient is in bulb-local space → box-local space
+                    bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
+                }
+                float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
+
                 // ==========================================
                 // 4. Reflector shading
                 // ==========================================
                 float3 interiorColor;
 
-                if (hit)
+                if (bulbHit && bulbT < wallT)
+                {
+                    float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
+                    float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
+                    if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
+                    float3 bulbReflDir = reflect(-worldViewDir, bulbWorldN);
+                    float bulbMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
+                    float4 bulbEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, bulbReflDir, bulbMip);
+                    float3 bulbEnvColor = DecodeHDR(bulbEnvSample, unity_SpecCube0_HDR);
+                    float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
+                }
+                else if (hit)
                 {
                     // Procedural facet normal (in box-local space, perturbing the hit normal)
                     float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
@@ -391,7 +465,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     float mip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflDir, mip);
                     float3 envColor = DecodeHDR(envSample, unity_SpecCube0_HDR);
-                    interiorColor = envColor * _InteriorBrightness * _InteriorColor.rgb;
+                    float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
 
                     // ==========================================
                     // 5. Bulb emission (reflection only)
@@ -407,15 +482,13 @@ Shader "Custom/HeadlightInteriorMapping"
                     float housingMip = _InteriorRoughness * UNITY_SPECCUBE_LOD_STEPS;
                     float4 housingEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, housingReflDir, housingMip);
                     float3 housingEnvColor = DecodeHDR(housingEnvSample, unity_SpecCube0_HDR);
-                    interiorColor = housingEnvColor * _InteriorBrightness * _InteriorColor.rgb;
+                    float housingLuma = dot(housingEnvColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
                 }
 
                 // ==========================================
                 // 6. Composite
                 // ==========================================
-                float luma = dot(interiorColor, float3(0.2126, 0.7152, 0.0722));
-                interiorColor = lerp(float3(luma, luma, luma), interiorColor, _InteriorSaturation);
-
                 float3 baseColor = tex2D(_MainTex, i.uvMain).rgb;
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength);
                 // Add lens specular and fresnel on top
