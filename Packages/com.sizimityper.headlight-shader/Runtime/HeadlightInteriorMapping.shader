@@ -326,7 +326,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return normalize(facetN);
             }
 
-            fixed4 frag(v2f i) : SV_Target
+            float4 frag(v2f i) : SV_Target
             {
                 float3 worldViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 worldNormal = normalize(i.worldNormal);
@@ -496,7 +496,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor;
 
-                fixed4 col = fixed4(finalColor, 1.0);
+                float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return col;
             }
