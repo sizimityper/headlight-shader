@@ -53,14 +53,18 @@ Shader "Custom/HeadlightInteriorMapping"
 
         Pass
         {
+            Tags { "LightMode" = "ForwardBase" }
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile_fwdbase
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
 
             #include "UnityCG.cginc"
+            #include "Lighting.cginc"
             #ifndef UNITY_SPECCUBE_LOD_STEPS
                 #define UNITY_SPECCUBE_LOD_STEPS 6
             #endif
@@ -334,11 +338,13 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 1. Lens surface lighting (smooth)
                 // ==========================================
-                // Simple directional spec using view reflection against a fixed light
-                float3 lightDir = normalize(float3(0.3, 0.5, 1.0)); // normalized at compile time
+                // Directional specular using scene main light
+                float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+                float3 lightColor = _LightColor0.rgb;
+                float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
-                float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity;
+                float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
 
                 // Fresnel
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
