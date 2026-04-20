@@ -6,7 +6,16 @@
       "Bash(git push *)",
       "Bash(gh pr create --base main --head beta --title 'Fix shader bugs and replace MatCap with reflection probe' --body ' *)",
       "Bash(git revert *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(git stash *)",
+      "Bash(git reset *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(grep -E '[^0-9a-zA-Z _\\\\.\\\\\\(\\\\\\)\\\\[\\\\],=\\\\{\\\\}\"/:@#$*+-]|\\\\\\\\[^n]')",
+      "Bash(awk '/CGPROGRAM/{skip=1} /ENDCG/{skip=0; next} !skip' Packages/com.sizimityper.headlight-shader/Runtime/HeadlightInteriorMapping.shader)",
+      "Bash(git commit *)"
     ]
   }
 }
