@@ -46,9 +46,12 @@ Shader "Custom/HeadlightInteriorMapping"
         _BulbRotation ("バルブ回転 XYZ (度)", Vector) = (0, 0, 0, 0)
         _BulbBodySize ("バルブ本体サイズ (半径)", Range(0.001, 0.1)) = 0.02
         _BulbBodyLength ("バルブ本体長さ (半分)", Range(0.001, 0.2)) = 0.05
+        _BulbEndPos ("バルブ終端位置 (XYZ, オブジェクト空間)", Vector) = (0, 0, -0.5, 0)
+        [IntRange] _BulbCount ("バルブ数", Range(1, 32)) = 1
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
+        _BulbGlowSize ("バルブ発光点サイズ", Range(0.001, 0.5)) = 0.02
         _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
@@ -147,11 +150,14 @@ Shader "Custom/HeadlightInteriorMapping"
             float _FacetStrength;
 
             float4 _BulbPosition;
+            float4 _BulbEndPos;
             float4 _BulbRotation;
             float _BulbBodySize;
             float _BulbBodyLength;
+            float _BulbCount;
             float _BulbFacetN;
             float _BulbRimPower;
+            float _BulbGlowSize;
             float _BulbReflectStrength;
             float _BulbReflectRadius;
             float _BulbReflectFalloff;
@@ -472,34 +478,48 @@ Shader "Custom/HeadlightInteriorMapping"
                                            hitPos, hitNormal, hitUV);
                 #endif
 
-                // Bulb body: N-gon capsule via SDF sphere tracing
+                // バルブ列: 始端・終端をボックスローカル空間に変換
                 #if _SYMMETRIC_INTERIOR
-                float3 symBulbPos = float3(abs(_BulbPosition.x), _BulbPosition.y, _BulbPosition.z);
-                float3 bulbBoxLocal = mul(rot, symBulbPos - _BoxCenter.xyz);
+                float3 bulbStartLocal = mul(rot, float3(abs(_BulbPosition.x), _BulbPosition.y, _BulbPosition.z) - _BoxCenter.xyz);
+                float3 bulbEndLocal   = mul(rot, float3(abs(_BulbEndPos.x),   _BulbEndPos.y,   _BulbEndPos.z)   - _BoxCenter.xyz);
                 #else
-                float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
+                float3 bulbStartLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
+                float3 bulbEndLocal   = mul(rot, _BulbEndPos.xyz   - _BoxCenter.xyz);
                 #endif
                 float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
                 float bulbT = 0.0;
                 bool bulbHit = false;
                 float3 bulbHitNormal = float3(0, 0, 1);
+                int   bulbHitIndex = 0;
                 float maxBulbDist = length(boxScale) * 3.0;
+                float bulbCountDenom = max(_BulbCount - 1.0, 1.0);
                 [loop]
                 for (int bi = 0; bi < 24; bi++)
                 {
-                    float3 bp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
-                    #if _BULBSHAPE_GLASS
-                    float bd = sdCapsule(bp, _BulbBodySize, _BulbBodyLength);
-                    #else
-                    float bd = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, int(round(_BulbFacetN)));
-                    #endif
-                    if (bd < 0.001) { bulbHit = true; break; }
+                    float3 rayPoint = localRayOrigin + localInteriorRay * bulbT;
+                    float bd = 1e9;
+                    int minIdx = 0;
+                    [loop]
+                    for (int li = 0; li < 32; li++)
+                    {
+                        if (li >= (int)_BulbCount) break;
+                        float3 bulbPos_i = lerp(bulbStartLocal, bulbEndLocal, (float)li / bulbCountDenom);
+                        float3 bp = mul(bulbRot, rayPoint - bulbPos_i);
+                        #if _BULBSHAPE_GLASS
+                        float bd_i = sdCapsule(bp, _BulbBodySize, _BulbBodyLength);
+                        #else
+                        float bd_i = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, int(round(_BulbFacetN)));
+                        #endif
+                        if (bd_i < bd) { bd = bd_i; minIdx = li; }
+                    }
+                    if (bd < 0.001) { bulbHit = true; bulbHitIndex = minIdx; break; }
                     if (bulbT > maxBulbDist) break;
                     bulbT += bd;
                 }
                 if (bulbHit)
                 {
-                    float3 hp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    float3 hitBulbLocal = lerp(bulbStartLocal, bulbEndLocal, (float)bulbHitIndex / bulbCountDenom);
+                    float3 hp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - hitBulbLocal);
                     #if _BULBSHAPE_GLASS
                     bulbHitNormal = normalize(mul(transpose(bulbRot), sdCapsuleNormal(hp, _BulbBodyLength)));
                     #else
@@ -537,15 +557,23 @@ Shader "Custom/HeadlightInteriorMapping"
                     interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation);
 
                     // ==========================================
-                    // 5. バルブ発光のリフレクター反射
+                    // 5. バルブ発光のリフレクター反射（全バルブ合算）
                     // ==========================================
-                    float3 toBulb = normalize(bulbBoxLocal - hitPos);
-                    float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
-                    float bulbSpec = pow(saturate(dot(reflectedBulb, -localInteriorRay)), _EmissionSharpness);
-                    emissionAdd += bulbSpec * _BulbColor.rgb * _EmissionIntensity;
+                    float minBulbDistToHit = 1e9;
+                    [loop]
+                    for (int li5 = 0; li5 < 32; li5++)
+                    {
+                        if (li5 >= (int)_BulbCount) break;
+                        float3 bulbPos_i = lerp(bulbStartLocal, bulbEndLocal, (float)li5 / bulbCountDenom);
+                        float3 toBulb_i = normalize(bulbPos_i - hitPos);
+                        float3 reflectedBulb_i = reflect(-toBulb_i, perturbedNormal);
+                        float bulbSpec_i = pow(saturate(dot(reflectedBulb_i, -localInteriorRay)), _EmissionSharpness);
+                        emissionAdd += bulbSpec_i * _BulbColor.rgb * _EmissionIntensity / _BulbCount;
+                        minBulbDistToHit = min(minBulbDistToHit, length(hitPos - bulbPos_i));
+                    }
 
-                    // バルブ色のリフレクター近接染め
-                    float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius + (facetN.x + facetN.y) * 0.5);
+                    // バルブ色のリフレクター近接染め（最近バルブからの距離で判定）
+                    float bulbDist = saturate(minBulbDistToHit / _BulbReflectRadius + (facetN.x + facetN.y) * 0.5);
                     float bulbProximity = pow(smoothstep(1.0, 0.0, bulbDist), _BulbReflectFalloff);
                     interiorColor *= lerp(float3(1.0, 1.0, 1.0), _BulbColor.rgb, saturate(bulbProximity * _BulbReflectStrength));
                 }
@@ -577,15 +605,20 @@ Shader "Custom/HeadlightInteriorMapping"
                     #endif
                 }
 
-                // 点光源発光：解析的ray-to-point距離でソフトグロー
-                // 発光強度が上がるほどグロー半径も広がる
+                // 点光源発光（全バルブ合算・総量を1バルブ相当に正規化）
                 {
-                    float3 toFilament = bulbBoxLocal - localRayOrigin;
-                    float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
-                    float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbBoxLocal);
-                    float glowRadius = _BulbBodySize * (1.0 + _EmissionIntensity * 0.05);
-                    float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
-                    emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity;
+                    float glowRadius = _BulbGlowSize * (1.0 + _EmissionIntensity * 0.05);
+                    [loop]
+                    for (int liG = 0; liG < 32; liG++)
+                    {
+                        if (liG >= (int)_BulbCount) break;
+                        float3 bulbPos_i = lerp(bulbStartLocal, bulbEndLocal, (float)liG / bulbCountDenom);
+                        float3 toFilament = bulbPos_i - localRayOrigin;
+                        float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
+                        float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbPos_i);
+                        float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
+                        emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity / _BulbCount;
+                    }
                 }
 
                 // ==========================================
@@ -599,8 +632,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor * edgeMask;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
-                finalColor += emissionAdd * edgeMask;
                 finalColor *= _LensColor.rgb;
+                finalColor += emissionAdd * edgeMask;
 
                 // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
                 finalColor = max(finalColor, float3(0, 0, 0));
