@@ -579,9 +579,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     #endif
                 }
 
-                // 点光源発光（ガラスモードのみ）：解析的ray-to-point距離でソフトグロー
+                // 点光源発光：解析的ray-to-point距離でソフトグロー
                 // 発光強度が上がるほどグロー半径も広がる
-                #if _BULBSHAPE_GLASS
                 {
                     float3 toFilament = bulbBoxLocal - localRayOrigin;
                     float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
@@ -590,7 +589,6 @@ Shader "Custom/HeadlightInteriorMapping"
                     float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
                     emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity;
                 }
-                #endif
 
                 // ==========================================
                 // 7. コンポジット
