@@ -546,7 +546,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     // バルブ色のリフレクター近接染め
                     float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius);
                     float bulbProximity = pow(smoothstep(1.0, 0.0, bulbDist), _BulbReflectFalloff);
-                    interiorColor += interiorColor * _BulbColor.rgb * bulbProximity * _BulbReflectStrength;
+                    interiorColor *= lerp(float3(1.0, 1.0, 1.0), _BulbColor.rgb, saturate(bulbProximity * _BulbReflectStrength));
                 }
                 else
                 {
