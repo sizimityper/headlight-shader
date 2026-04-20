@@ -583,7 +583,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 toFilament = bulbBoxLocal - localRayOrigin;
                     float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
                     float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbBoxLocal);
-                    float glowRadius = _BulbBodySize * 0.25 * (1.0 + _EmissionIntensity * 0.05);
+                    float glowRadius = _BulbBodySize * (1.0 + _EmissionIntensity * 0.05);
                     float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
                     emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity;
                 }
