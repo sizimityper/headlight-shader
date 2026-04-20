@@ -51,6 +51,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
+        _BulbGlowSize ("バルブ発光点サイズ", Range(0.001, 0.5)) = 0.02
         _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
@@ -156,6 +157,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _BulbCount;
             float _BulbFacetN;
             float _BulbRimPower;
+            float _BulbGlowSize;
             float _BulbReflectStrength;
             float _BulbReflectRadius;
             float _BulbReflectFalloff;
@@ -605,7 +607,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 // 点光源発光（全バルブ合算・総量を1バルブ相当に正規化）
                 {
-                    float glowRadius = _BulbBodySize * (1.0 + _EmissionIntensity * 0.05);
+                    float glowRadius = _BulbGlowSize * (1.0 + _EmissionIntensity * 0.05);
                     [loop]
                     for (int liG = 0; liG < 32; liG++)
                     {
