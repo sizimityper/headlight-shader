@@ -544,7 +544,8 @@ Shader "Custom/HeadlightInteriorMapping"
                     emissionAdd += bulbSpec * _BulbColor.rgb * _EmissionIntensity;
 
                     // バルブ色のリフレクター近接染め
-                    float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius);
+                    float3 distortedHitPos = hitPos + facetN * _BulbReflectRadius;
+                    float bulbDist = saturate(length(distortedHitPos - bulbBoxLocal) / _BulbReflectRadius);
                     float bulbProximity = pow(smoothstep(1.0, 0.0, bulbDist), _BulbReflectFalloff);
                     interiorColor *= lerp(float3(1.0, 1.0, 1.0), _BulbColor.rgb, saturate(bulbProximity * _BulbReflectStrength));
                 }
