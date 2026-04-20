@@ -2,53 +2,53 @@ Shader "Custom/HeadlightInteriorMapping"
 {
     Properties
     {
-        [Header(Lighting)]
-        _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.5
-        _MinBrightness ("Min Brightness", Range(0, 1)) = 0.1
+        [Header(ライティング)]
+        _ShadowStrength ("影の強さ", Range(0, 1)) = 0.5
+        _MinBrightness ("最小明るさ", Range(0, 1)) = 0.1
 
-        [Header(Lens Surface)]
-        _MainTex ("Base Color (RGB)", 2D) = "white" {}
-        _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
-        _EdgeMask ("Edge Mask (R=trim)", 2D) = "white" {}
-        _SpecularPower ("Specular Power", Range(1, 256)) = 64
-        _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
-        _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
-        _FresnelIntensity ("Fresnel Intensity", Range(0, 1)) = 0.5
-        _LensRoughness ("Lens Roughness", Range(0, 1)) = 0.0
+        [Header(レンズ表面)]
+        _MainTex ("ベースカラー (RGB)", 2D) = "white" {}
+        _BaseColorStrength ("ベースカラー強度", Range(0, 1)) = 1.0
+        _EdgeMask ("エッジマスク (R=トリム)", 2D) = "white" {}
+        _SpecularPower ("鏡面ハイライトの鋭さ", Range(1, 256)) = 64
+        _SpecularIntensity ("鏡面ハイライト強度", Range(0, 2)) = 0.8
+        _FresnelPower ("フレネルパワー", Range(1, 10)) = 3.0
+        _FresnelIntensity ("フレネル強度", Range(0, 1)) = 0.5
+        _LensRoughness ("レンズ粗さ", Range(0, 1)) = 0.0
 
-        [Header(Lens Flute Refraction)]
-        _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
-        _RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.05
+        [Header(レンズフルート屈折)]
+        _LensNormal ("レンズフルート法線", 2D) = "bump" {}
+        _RefractionStrength ("屈折強度", Range(0, 1)) = 0.05
 
-        [Header(Interior Mapping)]
-        _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
-        _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
-        _ScaleX ("Box Scale X", Range(0.001, 0.5)) = 0.1
-        _ScaleY ("Box Scale Y", Range(0.001, 0.5)) = 0.1
-        _ScaleZ ("Box Scale Z", Range(0.001, 0.5)) = 0.1
-        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
-        _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
-        [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("Symmetric Interior (Mirror X)", Float) = 0
-        _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
-        _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
+        [Header(内部マッピング)]
+        _BoxCenter ("ボックス中心 (オブジェクト空間)", Vector) = (0, 0, 0, 0)
+        _BoxRotation ("ボックス回転 XYZ (度)", Vector) = (0, 0, 0, 0)
+        _ScaleX ("ボックススケール X", Range(0.001, 0.5)) = 0.1
+        _ScaleY ("ボックススケール Y", Range(0.001, 0.5)) = 0.1
+        _ScaleZ ("ボックススケール Z", Range(0.001, 0.5)) = 0.1
+        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("内部形状", Float) = 0
+        _FilletRadius ("フィレット半径", Range(0, 0.5)) = 0.1
+        [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("内部を左右対称にする (Xミラー)", Float) = 0
+        _InteriorBlur ("内部ぼかし", Range(0, 0.2)) = 0.05
+        _InteriorBlurScale ("内部ぼかしスケール (大=細かい)", Range(5, 300)) = 80
 
-        [Header(Interior)]
-        _MatCap ("Interior MatCap", 2D) = "white" {}
-        _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
-        _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
-        _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
-        _InteriorSaturation ("Interior Saturation", Range(0, 2)) = 1.0
-        _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
-        _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
+        [Header(内部)]
+        _MatCap ("内部マットキャップ", 2D) = "white" {}
+        _InteriorColor ("内部カラー", Color) = (0.8, 0.8, 0.8, 1)
+        _InteriorRoughness ("内部粗さ", Range(0, 1)) = 0.0
+        _InteriorBrightness ("内部明るさ", Range(0, 2)) = 1.0
+        _InteriorSaturation ("内部彩度", Range(0, 2)) = 1.0
+        _FacetCount ("ファセット数 (XY)", Vector) = (8, 4, 0, 0)
+        _FacetStrength ("ファセット強度", Range(0, 0.5)) = 0.1
 
-        [Header(Bulb)]
-        _BulbPosition ("Bulb Position (XYZ, Object Space)", Vector) = (0, 0, -0.5, 0)
-        _BulbRotation ("Bulb Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
-        _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
-        _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
-        [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
-        _EmissionIntensity ("Emission Intensity", Range(0, 50)) = 0.0
-        _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
+        [Header(バルブ)]
+        _BulbPosition ("バルブ位置 (XYZ, オブジェクト空間)", Vector) = (0, 0, -0.5, 0)
+        _BulbRotation ("バルブ回転 XYZ (度)", Vector) = (0, 0, 0, 0)
+        _BulbBodySize ("バルブ本体サイズ (半径)", Range(0.001, 0.1)) = 0.02
+        _BulbBodyLength ("バルブ本体長さ (半分)", Range(0.001, 0.2)) = 0.05
+        [IntRange] _BulbFacetN ("バルブのファセット数", Range(3, 16)) = 8
+        _EmissionIntensity ("発光強度", Range(0, 50)) = 0.0
+        _EmissionSharpness ("発光の鋭さ", Range(1, 128)) = 16
 
     }
 
