@@ -78,7 +78,7 @@ Material:
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _EmissionIntensity: 10
+    - _EmissionIntensity: 50
     - _EmissionSharpness: 1
     - _FacetStrength: 0.5
     - _FilletRadius: 0.1

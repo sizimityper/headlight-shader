@@ -49,7 +49,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
-        _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 2)) = 0.5
+        _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
         _EmissionIntensity ("発光強度", Range(0, 50)) = 0.0
@@ -516,6 +516,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
                     #endif
                 }
+
                 float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
                 // ==========================================
@@ -544,9 +545,9 @@ Shader "Custom/HeadlightInteriorMapping"
                     emissionAdd += bulbSpec * _BulbColor.rgb * _EmissionIntensity;
 
                     // バルブ色のリフレクター近接染め
-                    float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius);
-                    float bulbProximity = pow(1.0 - bulbDist, _BulbReflectFalloff);
-                    interiorColor += interiorColor * _BulbColor.rgb * bulbProximity * _BulbReflectStrength;
+                    float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius + (facetN.x + facetN.y) * 0.5);
+                    float bulbProximity = pow(smoothstep(1.0, 0.0, bulbDist), _BulbReflectFalloff);
+                    interiorColor *= lerp(float3(1.0, 1.0, 1.0), _BulbColor.rgb, saturate(bulbProximity * _BulbReflectStrength));
                 }
                 else
                 {
@@ -567,13 +568,24 @@ Shader "Custom/HeadlightInteriorMapping"
                     #if _BULBSHAPE_GLASS
                     float bulbNdotV = saturate(dot(bulbWorldN, worldViewDir));
                     interiorColor = interiorColor * _BulbColor.rgb * pow(bulbNdotV, _BulbRimPower);
+                    // ガラス表面は発光しない。フィラメントのみ発光（下記）
                     #else
                     float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _BulbColor.rgb;
-                    #endif
-
                     emissionAdd += _BulbColor.rgb * _EmissionIntensity;
+                    #endif
+                }
+
+                // 点光源発光：解析的ray-to-point距離でソフトグロー
+                // 発光強度が上がるほどグロー半径も広がる
+                {
+                    float3 toFilament = bulbBoxLocal - localRayOrigin;
+                    float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
+                    float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbBoxLocal);
+                    float glowRadius = _BulbBodySize * (1.0 + _EmissionIntensity * 0.05);
+                    float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
+                    emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity;
                 }
 
                 // ==========================================
