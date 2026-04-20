@@ -518,19 +518,6 @@ Shader "Custom/HeadlightInteriorMapping"
                     bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
                     #endif
                 }
-                #if _BULBSHAPE_GLASS
-                float filamentT = 0.0;
-                bool filamentHit = false;
-                [loop]
-                for (int fi = 0; fi < 32; fi++)
-                {
-                    float3 fp = mul(bulbRot, localRayOrigin + localInteriorRay * filamentT - bulbBoxLocal);
-                    float fd = length(fp) - _FilamentSize;
-                    if (fd < 0.0005) { filamentHit = true; break; }
-                    if (filamentT > maxBulbDist) break;
-                    filamentT += fd;
-                }
-                #endif
 
                 float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
@@ -592,11 +579,16 @@ Shader "Custom/HeadlightInteriorMapping"
                     #endif
                 }
 
-                // フィラメント発光（ガラスモードのみ：ガラスを透過して見える）
+                // 点光源発光（ガラスモードのみ）：解析的ray-to-point距離でソフトグロー
+                // 発光強度が上がるほどグロー半径も広がる
                 #if _BULBSHAPE_GLASS
-                if (filamentHit && filamentT < wallT)
                 {
-                    emissionAdd += _BulbColor.rgb * _EmissionIntensity;
+                    float3 toFilament = bulbBoxLocal - localRayOrigin;
+                    float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
+                    float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbBoxLocal);
+                    float glowRadius = _FilamentSize * (1.0 + _EmissionIntensity * 0.05);
+                    float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
+                    emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity;
                 }
                 #endif
 
