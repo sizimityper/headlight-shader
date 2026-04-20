@@ -10,8 +10,8 @@ Shader "Custom/HeadlightInteriorMapping"
         _MainTex ("ベースカラー (RGB)", 2D) = "white" {}
         _BaseColorStrength ("ベースカラー強度", Range(0, 1)) = 1.0
         _EdgeMask ("エッジマスク (R=トリム)", 2D) = "white" {}
-        _SpecularPower ("スペキュラーパワー", Range(1, 256)) = 64
-        _SpecularIntensity ("スペキュラー強度", Range(0, 2)) = 0.8
+        _SpecularPower ("鏡面ハイライトの鋭さ", Range(1, 256)) = 64
+        _SpecularIntensity ("鏡面ハイライト強度", Range(0, 2)) = 0.8
         _FresnelPower ("フレネルパワー", Range(1, 10)) = 3.0
         _FresnelIntensity ("フレネル強度", Range(0, 1)) = 0.5
         _LensRoughness ("レンズ粗さ", Range(0, 1)) = 0.0
@@ -33,7 +33,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _InteriorBlurScale ("内部ぼかしスケール (大=細かい)", Range(5, 300)) = 80
 
         [Header(内部)]
-        _MatCap ("内部 MatCap", 2D) = "white" {}
+        _MatCap ("内部マットキャップ", 2D) = "white" {}
         _InteriorColor ("内部カラー", Color) = (0.8, 0.8, 0.8, 1)
         _InteriorRoughness ("内部粗さ", Range(0, 1)) = 0.0
         _InteriorBrightness ("内部明るさ", Range(0, 2)) = 1.0
@@ -48,7 +48,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _BulbBodyLength ("バルブ本体長さ (半分)", Range(0.001, 0.2)) = 0.05
         [IntRange] _BulbFacetN ("バルブのファセット数", Range(3, 16)) = 8
         _EmissionIntensity ("発光強度", Range(0, 50)) = 0.0
-        _EmissionSharpness ("発光シャープネス", Range(1, 128)) = 16
+        _EmissionSharpness ("発光の鋭さ", Range(1, 128)) = 16
 
     }
 
