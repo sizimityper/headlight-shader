@@ -49,7 +49,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
-        _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 2)) = 0.5
+        _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
         _EmissionIntensity ("発光強度", Range(0, 50)) = 0.0
@@ -545,7 +545,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                     // バルブ色のリフレクター近接染め
                     float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius);
-                    float bulbProximity = pow(1.0 - bulbDist, _BulbReflectFalloff);
+                    float bulbProximity = pow(smoothstep(1.0, 0.0, bulbDist), _BulbReflectFalloff);
                     interiorColor += interiorColor * _BulbColor.rgb * bulbProximity * _BulbReflectStrength;
                 }
                 else
