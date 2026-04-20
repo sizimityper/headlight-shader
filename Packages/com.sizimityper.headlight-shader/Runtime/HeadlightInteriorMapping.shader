@@ -49,7 +49,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
-        _FilamentSize ("フィラメントサイズ (半径, ガラスのみ)", Range(0.0001, 0.01)) = 0.003
+        _FilamentSize ("バルブ発光点サイズ (半径, ガラスのみ)", Range(0.0001, 0.02)) = 0.005
         _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
@@ -525,7 +525,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 for (int fi = 0; fi < 32; fi++)
                 {
                     float3 fp = mul(bulbRot, localRayOrigin + localInteriorRay * filamentT - bulbBoxLocal);
-                    float fd = sdCapsule(fp, _FilamentSize, _BulbBodyLength);
+                    float fd = length(fp) - _FilamentSize;
                     if (fd < 0.0005) { filamentHit = true; break; }
                     if (filamentT > maxBulbDist) break;
                     filamentT += fd;
