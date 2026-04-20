@@ -632,8 +632,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor * edgeMask;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
-                finalColor += emissionAdd * edgeMask;
                 finalColor *= _LensColor.rgb;
+                finalColor += emissionAdd * edgeMask;
 
                 // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
                 finalColor = max(finalColor, float3(0, 0, 0));
