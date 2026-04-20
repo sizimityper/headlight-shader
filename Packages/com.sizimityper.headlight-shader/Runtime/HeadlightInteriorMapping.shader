@@ -254,14 +254,16 @@ Shader "Custom/HeadlightInteriorMapping"
 
             float sdCapsule(float3 p, float r, float h)
             {
-                p.z -= clamp(p.z, -h, h);
-                return length(p) - r;
+                float3 q = p;
+                q.z -= clamp(q.z, -h, h);
+                return length(q) - r;
             }
 
             float3 sdCapsuleNormal(float3 p, float h)
             {
-                p.z -= clamp(p.z, -h, h);
-                return normalize(p);
+                float3 q = p;
+                q.z -= clamp(q.z, -h, h);
+                return normalize(q);
             }
 
             float sdRoundBox(float3 p, float3 b, float r)
@@ -519,7 +521,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 // 4. リフレクター / ハウジング シェーディング
                 // ==========================================
-                float3 interiorColor;
+                float3 interiorColor = float3(0, 0, 0);
                 float3 emissionAdd = float3(0, 0, 0);
 
                 if (hit)
