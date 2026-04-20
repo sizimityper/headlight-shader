@@ -49,6 +49,7 @@ Shader "Custom/HeadlightInteriorMapping"
         [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
         [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
         _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
+        _FilamentSize ("フィラメントサイズ (半径, ガラスのみ)", Range(0.0001, 0.01)) = 0.003
         _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 5)) = 0.5
         _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
         _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
@@ -152,6 +153,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _BulbBodyLength;
             float _BulbFacetN;
             float _BulbRimPower;
+            float _FilamentSize;
             float _BulbReflectStrength;
             float _BulbReflectRadius;
             float _BulbReflectFalloff;
@@ -516,6 +518,20 @@ Shader "Custom/HeadlightInteriorMapping"
                     bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
                     #endif
                 }
+                #if _BULBSHAPE_GLASS
+                float filamentT = 0.0;
+                bool filamentHit = false;
+                [loop]
+                for (int fi = 0; fi < 32; fi++)
+                {
+                    float3 fp = mul(bulbRot, localRayOrigin + localInteriorRay * filamentT - bulbBoxLocal);
+                    float fd = sdCapsule(fp, _FilamentSize, _BulbBodyLength);
+                    if (fd < 0.0005) { filamentHit = true; break; }
+                    if (filamentT > maxBulbDist) break;
+                    filamentT += fd;
+                }
+                #endif
+
                 float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
                 // ==========================================
@@ -567,14 +583,22 @@ Shader "Custom/HeadlightInteriorMapping"
                     #if _BULBSHAPE_GLASS
                     float bulbNdotV = saturate(dot(bulbWorldN, worldViewDir));
                     interiorColor = interiorColor * _BulbColor.rgb * pow(bulbNdotV, _BulbRimPower);
+                    // ガラス表面は発光しない。フィラメントのみ発光（下記）
                     #else
                     float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _BulbColor.rgb;
+                    emissionAdd += _BulbColor.rgb * _EmissionIntensity;
                     #endif
+                }
 
+                // フィラメント発光（ガラスモードのみ：ガラスを透過して見える）
+                #if _BULBSHAPE_GLASS
+                if (filamentHit && filamentT < wallT)
+                {
                     emissionAdd += _BulbColor.rgb * _EmissionIntensity;
                 }
+                #endif
 
                 // ==========================================
                 // 7. コンポジット
