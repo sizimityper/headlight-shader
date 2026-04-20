@@ -3,52 +3,57 @@ Shader "Custom/HeadlightInteriorMapping"
     Properties
     {
         [Header(Lighting)]
-        _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.5
-        _MinBrightness ("Min Brightness", Range(0, 1)) = 0.1
+        _ShadowStrength ("影の強さ", Range(0, 1)) = 0.5
+        _MinBrightness ("最小明るさ", Range(0, 1)) = 0.1
 
         [Header(Lens Surface)]
-        _MainTex ("Base Color (RGB)", 2D) = "white" {}
-        _BaseColorStrength ("Base Color Strength", Range(0, 1)) = 1.0
-        _EdgeMask ("Edge Mask (R=trim)", 2D) = "white" {}
-        _SpecularPower ("Specular Power", Range(1, 256)) = 64
-        _SpecularIntensity ("Specular Intensity", Range(0, 2)) = 0.8
-        _FresnelPower ("Fresnel Power", Range(1, 10)) = 3.0
-        _FresnelIntensity ("Fresnel Intensity", Range(0, 1)) = 0.5
-        _LensRoughness ("Lens Roughness", Range(0, 1)) = 0.0
+        _MainTex ("ベースカラー (RGB)", 2D) = "white" {}
+        _BaseColorStrength ("ベースカラー強度", Range(0, 1)) = 1.0
+        _EdgeMask ("エッジマスク (R=トリム)", 2D) = "white" {}
+        _SpecularPower ("鏡面ハイライトの鋭さ", Range(1, 256)) = 64
+        _SpecularIntensity ("鏡面ハイライト強度", Range(0, 2)) = 0.8
+        _FresnelPower ("フレネルパワー", Range(1, 10)) = 3.0
+        _FresnelIntensity ("フレネル強度", Range(0, 1)) = 0.5
+        _LensRoughness ("レンズ粗さ", Range(0, 1)) = 0.0
 
         [Header(Lens Flute Refraction)]
-        _LensNormal ("Lens Flute Normal", 2D) = "bump" {}
-        _RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.05
+        _LensNormal ("レンズフルート法線", 2D) = "bump" {}
+        _RefractionStrength ("屈折強度", Range(0, 1)) = 0.05
 
         [Header(Interior Mapping)]
-        _BoxCenter ("Box Center (Object Space)", Vector) = (0, 0, 0, 0)
-        _BoxRotation ("Box Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
-        _ScaleX ("Box Scale X", Range(0.001, 0.5)) = 0.1
-        _ScaleY ("Box Scale Y", Range(0.001, 0.5)) = 0.1
-        _ScaleZ ("Box Scale Z", Range(0.001, 0.5)) = 0.1
-        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
-        _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
-        [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("Symmetric Interior (Mirror X)", Float) = 0
-        _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
-        _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
+        _BoxCenter ("ボックス中心 (オブジェクト空間)", Vector) = (0, 0, 0, 0)
+        _BoxRotation ("ボックス回転 XYZ (度)", Vector) = (0, 0, 0, 0)
+        _ScaleX ("ボックススケール X", Range(0.001, 0.5)) = 0.1
+        _ScaleY ("ボックススケール Y", Range(0.001, 0.5)) = 0.1
+        _ScaleZ ("ボックススケール Z", Range(0.001, 0.5)) = 0.1
+        [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("内部形状", Float) = 0
+        _FilletRadius ("フィレット半径", Range(0, 0.5)) = 0.1
+        [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("内部を左右対称にする (Xミラー)", Float) = 0
+        _InteriorBlur ("内部ぼかし", Range(0, 0.2)) = 0.05
+        _InteriorBlurScale ("内部ぼかしスケール (大=細かい)", Range(5, 300)) = 80
 
         [Header(Interior)]
-        _MatCap ("Interior MatCap", 2D) = "white" {}
-        _InteriorColor ("Interior Color", Color) = (0.8, 0.8, 0.8, 1)
-        _InteriorRoughness ("Interior Roughness", Range(0, 1)) = 0.0
-        _InteriorBrightness ("Interior Brightness", Range(0, 2)) = 1.0
-        _InteriorSaturation ("Interior Saturation", Range(0, 2)) = 1.0
-        _FacetCount ("Facet Count (XY)", Vector) = (8, 4, 0, 0)
-        _FacetStrength ("Facet Strength", Range(0, 0.5)) = 0.1
+        _MatCap ("内部マットキャップ", 2D) = "white" {}
+        _LensColor ("レンズカラー (全体乗算)", Color) = (1, 1, 1, 1)
+        _BulbColor ("バルブカラー", Color) = (1, 0.5, 0, 1)
+        _InteriorRoughness ("内部粗さ", Range(0, 1)) = 0.0
+        _InteriorSaturation ("内部彩度", Range(0, 2)) = 1.0
+        _FacetCount ("ファセット数 (XY)", Vector) = (8, 4, 0, 0)
+        _FacetStrength ("ファセット強度", Range(0, 0.5)) = 0.1
 
         [Header(Bulb)]
-        _BulbPosition ("Bulb Position (XYZ, Object Space)", Vector) = (0, 0, -0.5, 0)
-        _BulbRotation ("Bulb Rotation XYZ (degrees)", Vector) = (0, 0, 0, 0)
-        _BulbBodySize ("Bulb Body Size (radius)", Range(0.001, 0.1)) = 0.02
-        _BulbBodyLength ("Bulb Body Length (half)", Range(0.001, 0.2)) = 0.05
-        [IntRange] _BulbFacetN ("Bulb Facet Count", Range(3, 16)) = 8
-        _EmissionIntensity ("Emission Intensity", Range(0, 50)) = 0.0
-        _EmissionSharpness ("Emission Sharpness", Range(1, 128)) = 16
+        _BulbPosition ("バルブ位置 (XYZ, オブジェクト空間)", Vector) = (0, 0, -0.5, 0)
+        _BulbRotation ("バルブ回転 XYZ (度)", Vector) = (0, 0, 0, 0)
+        _BulbBodySize ("バルブ本体サイズ (半径)", Range(0.001, 0.1)) = 0.02
+        _BulbBodyLength ("バルブ本体長さ (半分)", Range(0.001, 0.2)) = 0.05
+        [Toggle(_BULBSHAPE_GLASS)] _BulbShapeGlass ("バルブ形状: スムースガラスカプセル", Float) = 0
+        [IntRange] _BulbFacetN ("バルブのファセット数 (メタリックのみ)", Range(3, 16)) = 8
+        _BulbRimPower ("バルブリムパワー (ガラスのみ)", Range(0.1, 16)) = 2
+        _BulbReflectStrength ("バルブ色のリフレクター反映強度", Range(0, 2)) = 0.5
+        _BulbReflectRadius ("バルブ色の反映半径", Range(0.001, 1)) = 0.2
+        _BulbReflectFalloff ("バルブ色の反映減衰", Range(0.1, 10)) = 1
+        _EmissionIntensity ("発光強度", Range(0, 50)) = 0.0
+        _EmissionSharpness ("発光の鋭さ", Range(1, 128)) = 16
 
     }
 
@@ -73,6 +78,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
             #pragma shader_feature _SYMMETRIC_INTERIOR
+            #pragma shader_feature _BULBSHAPE_GLASS
 
             #include "UnityCG.cginc"
             #include "Lighting.cginc"
@@ -133,9 +139,9 @@ Shader "Custom/HeadlightInteriorMapping"
             float _InteriorBlur;
             float _InteriorBlurScale;
             sampler2D _MatCap;
-            float4 _InteriorColor;
+            float4 _LensColor;
+            float4 _BulbColor;
             float _InteriorRoughness;
-            float _InteriorBrightness;
             float _InteriorSaturation;
             float4 _FacetCount;
             float _FacetStrength;
@@ -145,6 +151,10 @@ Shader "Custom/HeadlightInteriorMapping"
             float _BulbBodySize;
             float _BulbBodyLength;
             float _BulbFacetN;
+            float _BulbRimPower;
+            float _BulbReflectStrength;
+            float _BulbReflectRadius;
+            float _BulbReflectFalloff;
             float _EmissionIntensity;
             float _EmissionSharpness;
 
@@ -240,6 +250,20 @@ Shader "Custom/HeadlightInteriorMapping"
                 float dXY = sdNGon2D(p.xy, r, n);
                 float dZ = max(abs(p.z) - h, 0.0);
                 return length(float2(max(dXY, 0.0), dZ)) + min(dXY, 0.0);
+            }
+
+            float sdCapsule(float3 p, float r, float h)
+            {
+                float3 q = p;
+                q.z -= clamp(q.z, -h, h);
+                return length(q) - r;
+            }
+
+            float3 sdCapsuleNormal(float3 p, float h)
+            {
+                float3 q = p;
+                q.z -= clamp(q.z, -h, h);
+                return normalize(q);
             }
 
             float sdRoundBox(float3 p, float3 b, float r)
@@ -455,7 +479,6 @@ Shader "Custom/HeadlightInteriorMapping"
                 #else
                 float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
                 #endif
-                int bulbN = int(round(_BulbFacetN));
                 float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
                 float bulbT = 0.0;
                 bool bulbHit = false;
@@ -465,7 +488,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 for (int bi = 0; bi < 24; bi++)
                 {
                     float3 bp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
-                    float bd = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, bulbN);
+                    #if _BULBSHAPE_GLASS
+                    float bd = sdCapsule(bp, _BulbBodySize, _BulbBodyLength);
+                    #else
+                    float bd = sdNGonCapsule(bp, _BulbBodySize, _BulbBodyLength, int(round(_BulbFacetN)));
+                    #endif
                     if (bd < 0.001) { bulbHit = true; break; }
                     if (bulbT > maxBulbDist) break;
                     bulbT += bd;
@@ -473,7 +500,11 @@ Shader "Custom/HeadlightInteriorMapping"
                 if (bulbHit)
                 {
                     float3 hp = mul(bulbRot, localRayOrigin + localInteriorRay * bulbT - bulbBoxLocal);
+                    #if _BULBSHAPE_GLASS
+                    bulbHitNormal = normalize(mul(transpose(bulbRot), sdCapsuleNormal(hp, _BulbBodyLength)));
+                    #else
                     float e = 0.001;
+                    int bulbN = int(round(_BulbFacetN));
                     float3 bulbGrad = float3(
                         sdNGonCapsule(hp + float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN) -
                         sdNGonCapsule(hp - float3(e,0,0), _BulbBodySize, _BulbBodyLength, bulbN),
@@ -482,66 +513,72 @@ Shader "Custom/HeadlightInteriorMapping"
                         sdNGonCapsule(hp + float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN) -
                         sdNGonCapsule(hp - float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN)
                     );
-                    // Gradient is in bulb-local space → box-local space
                     bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
+                    #endif
                 }
                 float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
                 // ==========================================
-                // 4. Reflector shading
+                // 4. リフレクター / ハウジング シェーディング
                 // ==========================================
-                float3 interiorColor;
+                float3 interiorColor = float3(0, 0, 0);
                 float3 emissionAdd = float3(0, 0, 0);
 
-                if (bulbHit && bulbT < wallT)
+                if (hit)
                 {
-                    float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
-                    float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
-                    if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
-                    float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
-                    float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
-                    interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
-                    emissionAdd += _InteriorColor.rgb * _EmissionIntensity;
-                }
-                else if (hit)
-                {
-                    // Procedural facet normal (in box-local space, perturbing the hit normal)
                     float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
-
-                    // Blend facet perturbation with the actual hit wall normal
-                    float3 perturbedNormal;
-                    perturbedNormal.x = hitNormal.x + facetN.x;
-                    perturbedNormal.y = hitNormal.y + facetN.y;
-                    perturbedNormal.z = hitNormal.z + facetN.z;
-                    perturbedNormal = normalize(perturbedNormal);
-
+                    float3 perturbedNormal = normalize(hitNormal + facetN);
                     float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
-                    // Sample MatCap with perturbed reflector normal
                     float3 envColor = tex2D(_MatCap, getMatcapUV(worldPerturbedN)).rgb;
                     float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
-                    interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
+                    interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation);
 
                     // ==========================================
-                    // 5. Bulb emission (reflection only)
+                    // 5. バルブ発光のリフレクター反射
                     // ==========================================
-                    float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
+                    float3 toBulb = normalize(bulbBoxLocal - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
-                    float bulbSpec = pow(saturate(dot(reflectedBulb, -interiorRay)), _EmissionSharpness);
-                    emissionAdd += bulbSpec * _InteriorColor.rgb * _EmissionIntensity;
+                    float bulbSpec = pow(saturate(dot(reflectedBulb, -localInteriorRay)), _EmissionSharpness);
+                    emissionAdd += bulbSpec * _BulbColor.rgb * _EmissionIntensity;
+
+                    // バルブ色のリフレクター近接染め
+                    float bulbDist = saturate(length(hitPos - bulbBoxLocal) / _BulbReflectRadius);
+                    float bulbProximity = pow(1.0 - bulbDist, _BulbReflectFalloff);
+                    interiorColor += interiorColor * _BulbColor.rgb * bulbProximity * _BulbReflectStrength;
                 }
                 else
                 {
                     float3 housingEnvColor = tex2D(_MatCap, getMatcapUV(worldNormal)).rgb;
                     float housingLuma = dot(housingEnvColor, float3(0.2126, 0.7152, 0.0722));
-                    interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
+                    interiorColor = lerp(housingEnvColor, housingLuma.xxx, 1.0 - _InteriorSaturation);
                 }
 
                 // ==========================================
-                // 6. Composite
+                // 6. バルブ シェーディング
                 // ==========================================
-                // Scale hardcoded specular by SH ambient so it fades in dark environments
+                if (bulbHit && bulbT < wallT)
+                {
+                    float3 bulbNormalOS = mul(transpose(rot), bulbHitNormal);
+                    float3 bulbWorldN = normalize(mul((float3x3)unity_ObjectToWorld, bulbNormalOS));
+                    if (dot(bulbWorldN, worldViewDir) < 0.0) bulbWorldN = -bulbWorldN;
+
+                    #if _BULBSHAPE_GLASS
+                    float bulbNdotV = saturate(dot(bulbWorldN, worldViewDir));
+                    interiorColor = interiorColor * _BulbColor.rgb * pow(bulbNdotV, _BulbRimPower);
+                    #else
+                    float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
+                    float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
+                    interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _BulbColor.rgb;
+                    #endif
+
+                    emissionAdd += _BulbColor.rgb * _EmissionIntensity;
+                }
+
+                // ==========================================
+                // 7. コンポジット
+                // ==========================================
                 float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
@@ -551,6 +588,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
                 finalColor += emissionAdd * edgeMask;
+                finalColor *= _LensColor.rgb;
 
                 // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
                 finalColor = max(finalColor, float3(0, 0, 0));
@@ -599,8 +637,7 @@ Shader "Custom/HeadlightInteriorMapping"
             float _SpecularIntensity;
             float _FresnelPower;
             float _FresnelIntensity;
-            float4 _InteriorColor;
-            float _InteriorBrightness;
+            float4 _LensColor;
 
             v2fAdd vertAdd(appdataAdd v)
             {
@@ -641,7 +678,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 // Subtle interior brightening (light passing through lens)
                 float NdotL = saturate(dot(worldNormal, lightDir));
-                float3 interiorAdd = _InteriorColor.rgb * _InteriorBrightness * NdotL * 0.3;
+                float3 interiorAdd = _LensColor.rgb * NdotL * 0.3;
 
                 float3 finalColor = (spec + fresnel + interiorAdd) * lightColor * atten;
 
