@@ -28,6 +28,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _ScaleZ ("Box Scale Z", Range(0.001, 0.5)) = 0.1
         [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("Interior Shape", Float) = 0
         _FilletRadius ("Fillet Radius", Range(0, 0.5)) = 0.1
+        [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("Symmetric Interior (Mirror X)", Float) = 0
         _InteriorBlur ("Interior Blur", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("Interior Blur Scale (large=fine)", Range(5, 300)) = 80
 
@@ -71,6 +72,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma multi_compile_instancing
             #pragma target 3.0
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
+            #pragma shader_feature _SYMMETRIC_INTERIOR
 
             #include "UnityCG.cginc"
             #include "Lighting.cginc"
@@ -417,8 +419,20 @@ Shader "Custom/HeadlightInteriorMapping"
                 // ==========================================
                 float3 boxScale = float3(_ScaleX, _ScaleY, _ScaleZ);
                 float3x3 rot = boxRotationMatrix(_BoxRotation.xyz);
+
+                // オブジェクト空間でX=0を鏡面として折り返す：ボックスが+X側に設定されていれば
+                // -X側にも対称複製される（左右のライトを同じマテリアルで共用できる）
+                #if _SYMMETRIC_INTERIOR
+                float xSign = i.objectPos.x >= 0 ? 1.0 : -1.0;
+                float3 symObjectPos = float3(abs(i.objectPos.x), i.objectPos.y, i.objectPos.z);
+                float3 symInteriorRay = float3(interiorRay.x * xSign, interiorRay.y, interiorRay.z);
+                float3 localRayOrigin = mul(rot, symObjectPos - _BoxCenter.xyz);
+                float3 localInteriorRay = mul(rot, symInteriorRay);
+                #else
                 float3 localRayOrigin = mul(rot, i.objectPos - _BoxCenter.xyz);
                 float3 localInteriorRay = mul(rot, interiorRay);
+                #endif
+
                 float3 hitPos;
                 float3 hitNormal;
                 float2 hitUV;
@@ -435,7 +449,12 @@ Shader "Custom/HeadlightInteriorMapping"
                 #endif
 
                 // Bulb body: N-gon capsule via SDF sphere tracing
+                #if _SYMMETRIC_INTERIOR
+                float3 symBulbPos = float3(abs(_BulbPosition.x), _BulbPosition.y, _BulbPosition.z);
+                float3 bulbBoxLocal = mul(rot, symBulbPos - _BoxCenter.xyz);
+                #else
                 float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
+                #endif
                 int bulbN = int(round(_BulbFacetN));
                 float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
                 float bulbT = 0.0;
