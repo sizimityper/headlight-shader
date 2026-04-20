@@ -91,7 +91,7 @@ Shader "Custom/HeadlightInteriorMapping"
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float4 uvs : TEXCOORD0;     // xy=lensNormal, zw=mainTex
+                float4 uvs : TEXCOORD0;     // xy=レンズ法線、zw=メインテクスチャ
                 float3 worldPos : TEXCOORD1;
                 float3 worldNormal : TEXCOORD2;
                 float3 objTangent : TEXCOORD3;
@@ -161,7 +161,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 o.objBitangent = cross(o.objNormal, o.objTangent) * v.tangent.w;
                 o.objectPos = v.vertex.xyz;
 
-                // View direction in object space for interior mapping
+                // 内部マッピング用のオブジェクト空間ビュー方向
                 float3 worldViewDir = _WorldSpaceCameraPos - o.worldPos;
                 o.objectViewDir = mul((float3x3)unity_WorldToObject, worldViewDir);
 
@@ -170,8 +170,8 @@ Shader "Custom/HeadlightInteriorMapping"
                 return o;
             }
 
-            // Box interior mapping: ray-box intersection
-            // Returns hit position in box-local space and hit normal
+            // ボックス内部マッピング：レイとボックスの交差判定
+            // ボックスローカル空間でのヒット位置と法線を返す
             bool interiorMapping(float3 rayOrigin, float3 rayDir, float3 boxScale,
                                  out float3 hitPos, out float3 hitNormal, out float2 hitUV)
             {
@@ -181,7 +181,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 float3 tFar = max(tMin, tMax);
 
-                // Track which axis hits first to avoid float equality comparison
+                // 浮動小数点の等値比較を避けるため、最初に当たる軸を追跡
                 int axis = 0;
                 float t = tFar.x;
                 if (tFar.y < t) { t = tFar.y; axis = 1; }
@@ -197,22 +197,22 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 hitPos = rayOrigin + rayDir * t;
 
-                // Determine which face was hit and compute UV
+                // ヒットした面を判定してUVを計算
                 if (axis == 2)
                 {
-                    // Back wall
+                    // 背面
                     hitNormal = float3(0, 0, sign(rayDir.z));
                     hitUV = hitPos.xy / boxScale.xy * 0.5 + 0.5;
                 }
                 else if (axis == 0)
                 {
-                    // Side wall
+                    // 側面
                     hitNormal = float3(sign(rayDir.x), 0, 0);
                     hitUV = hitPos.zy / boxScale.zy * 0.5 + 0.5;
                 }
                 else
                 {
-                    // Top/bottom wall
+                    // 上下面
                     hitNormal = float3(0, sign(rayDir.y), 0);
                     hitUV = hitPos.xz / boxScale.xz * 0.5 + 0.5;
                 }
@@ -220,7 +220,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
-            // 2D SDF for regular N-gon (circumradius r)
+            // 正N角形（外接円半径 r）の2D SDF
             float sdNGon2D(float2 p, float r, int n)
             {
                 float an = UNITY_PI / float(n);
@@ -232,7 +232,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return length(q) * sign(q.x);
             }
 
-            // 3D SDF for N-gon capsule (Z-aligned, half-length h, circumradius r)
+            // N角形カプセル（Z軸向き、半長 h、外接円半径 r）の3D SDF
             float sdNGonCapsule(float3 p, float r, float h, int n)
             {
                 float dXY = sdNGon2D(p.xy, r, n);
@@ -268,7 +268,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 hitPos = p;
 
-                // Analytical gradient of rounded box SDF
+                // 丸み付きボックスSDFの解析的勾配
                 float3 q = abs(p) - halfExtents + filletR;
                 float3 m = max(q, 0.0);
                 float3 grad;
@@ -291,7 +291,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
-            // Ellipsoid interior mapping: ray-ellipsoid intersection (ray origin assumed inside)
+            // 楕円体内部マッピング：レイと楕円体の交差判定（レイ原点は内部を想定）
             bool interiorMappingEllipsoid(float3 rayOrigin, float3 rayDir, float3 semiAxes,
                                           out float3 hitPos, out float3 hitNormal, out float2 hitUV)
             {
@@ -324,7 +324,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return true;
             }
 
-            // Rotation matrix from XYZ Euler degrees (Rz*Ry*Rx order)
+            // XYZオイラー角（度）から回転行列を生成（Rz*Ry*Rx 順）
             float3x3 boxRotationMatrix(float3 eulerDeg)
             {
                 float3 r = eulerDeg * (UNITY_PI / 180.0);
@@ -344,7 +344,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return viewN.xy * 0.5 + 0.5;
             }
 
-            // Procedural kamaboko facet normal (tangent-space, z-forward)
+            // 手続き的なかまぼこ面法線（接空間、z前方）
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
                 float2 cell = frac(uv * facetCount);
@@ -362,9 +362,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 float3 worldNormal = normalize(i.worldNormal);
 
                 // ==========================================
-                // 1. Lens surface lighting (smooth)
+                // 1. レンズ表面ライティング（滑らか）
                 // ==========================================
-                // Directional specular using scene main light
+                // シーンのメインライトを使った指向性スペキュラ
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz + float3(0, 1e-6, 0));
                 float3 lightColor = _LightColor0.rgb;
                 float lightLuma = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
@@ -380,27 +380,27 @@ Shader "Custom/HeadlightInteriorMapping"
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float specular = pow(NdotH, _SpecularPower) * _SpecularIntensity * lightLuma;
 
-                // Fresnel
+                // フレネル
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
                 float fresnel = pow(1.0 - NdotV, _FresnelPower) * _FresnelIntensity;
 
-                // Lens surface reflection probe
+                // レンズ表面の反射プローブ
                 float3 lensReflDir = reflect(-worldViewDir, worldNormal);
                 float lensMip = _LensRoughness * UNITY_SPECCUBE_LOD_STEPS;
                 float4 lensEnvSample = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, lensReflDir, lensMip);
                 float3 lensEnvColor = DecodeHDR(lensEnvSample, unity_SpecCube0_HDR);
 
                 // ==========================================
-                // 2. Lens flute refraction for interior ray
+                // 2. レンズフルート屈折による内部レイ生成
                 // ==========================================
                 float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uvs.xy));
-                // TBN already in object space from vertex shader
+                // TBNは頂点シェーダーで既にオブジェクト空間へ変換済み
                 float3 objTangent = normalize(i.objTangent);
                 float3 objBitangent = normalize(i.objBitangent);
                 float3 objNormal = normalize(i.objNormal);
 
-                // Refract view direction by flute normal (tangential components only)
-                // Negate: objectViewDir points toward camera; interior ray must go into the surface
+                // フルート法線で視線方向を屈折（接線成分のみ）
+                // 符号反転：objectViewDir はカメラ方向を向くため、内部レイは面の内側へ向ける
                 float3 objViewDir = normalize(i.objectViewDir);
                 float3 lensOffset = (objTangent * lensNormalTS.x + objBitangent * lensNormalTS.y) * _RefractionStrength;
                 float3 interiorRay = normalize(-objViewDir + lensOffset);
@@ -413,7 +413,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 interiorRay = normalize(interiorRay + float3(blurX, blurY, 0) * _InteriorBlur);
 
                 // ==========================================
-                // 3. Interior Mapping (box)
+                // 3. 内部マッピング（ボックス）
                 // ==========================================
                 float3 boxScale = float3(_ScaleX, _ScaleY, _ScaleZ);
                 float3x3 rot = boxRotationMatrix(_BoxRotation.xyz);
@@ -434,7 +434,7 @@ Shader "Custom/HeadlightInteriorMapping"
                                            hitPos, hitNormal, hitUV);
                 #endif
 
-                // Bulb body: N-gon capsule via SDF sphere tracing
+                // バルブ本体：SDFの球面トレーシングによるN角形カプセル
                 float3 bulbBoxLocal = mul(rot, _BulbPosition.xyz - _BoxCenter.xyz);
                 int bulbN = int(round(_BulbFacetN));
                 float3x3 bulbRot = boxRotationMatrix(_BulbRotation.xyz);
@@ -463,13 +463,13 @@ Shader "Custom/HeadlightInteriorMapping"
                         sdNGonCapsule(hp + float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN) -
                         sdNGonCapsule(hp - float3(0,0,e), _BulbBodySize, _BulbBodyLength, bulbN)
                     );
-                    // Gradient is in bulb-local space → box-local space
+                    // 勾配はバルブローカル空間なのでボックスローカル空間へ変換
                     bulbHitNormal = normalize(mul(transpose(bulbRot), bulbGrad));
                 }
                 float wallT = hit ? dot(hitPos - localRayOrigin, localInteriorRay) : 1e9;
 
                 // ==========================================
-                // 4. Reflector shading
+                // 4. リフレクターシェーディング
                 // ==========================================
                 float3 interiorColor;
                 float3 emissionAdd = float3(0, 0, 0);
@@ -486,10 +486,10 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
                 else if (hit)
                 {
-                    // Procedural facet normal (in box-local space, perturbing the hit normal)
+                    // 手続き的な面法線（ボックスローカル空間でヒット法線を擾乱）
                     float3 facetN = computeFacetNormal(hitUV, _FacetCount.xy, _FacetStrength);
 
-                    // Blend facet perturbation with the actual hit wall normal
+                    // 面の擾乱を実際の壁面法線と合成
                     float3 perturbedNormal;
                     perturbedNormal.x = hitNormal.x + facetN.x;
                     perturbedNormal.y = hitNormal.y + facetN.y;
@@ -499,13 +499,13 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 perturbedNormalOS = mul(transpose(rot), perturbedNormal);
                     float3 worldPerturbedN = normalize(mul((float3x3)unity_ObjectToWorld, perturbedNormalOS));
 
-                    // Sample MatCap with perturbed reflector normal
+                    // 擾乱したリフレクター法線でMatCapをサンプル
                     float3 envColor = tex2D(_MatCap, getMatcapUV(worldPerturbedN)).rgb;
                     float envLuma = dot(envColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(envColor, envLuma.xxx, 1.0 - _InteriorSaturation) * _InteriorBrightness * _InteriorColor.rgb;
 
                     // ==========================================
-                    // 5. Bulb emission (reflection only)
+                    // 5. バルブ発光（反射のみ）
                     // ==========================================
                     float3 toBulb = normalize(mul(rot, _BulbPosition.xyz - _BoxCenter.xyz) - hitPos);
                     float3 reflectedBulb = reflect(-toBulb, perturbedNormal);
@@ -520,9 +520,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 }
 
                 // ==========================================
-                // 6. Composite
+                // 6. 合成
                 // ==========================================
-                // Scale hardcoded specular by SH ambient so it fades in dark environments
+                // 固定スペキュラをSH環境光でスケーリングし、暗所で弱まるようにする
                 float3 shAmbient = max(ShadeSH9(float4(worldNormal, 1.0)), 0.0);
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
@@ -533,7 +533,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 finalColor += fresnel * lensEnvColor * shadowFactor;
                 finalColor += emissionAdd * edgeMask;
 
-                // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
+                // NaNガード：DirectX 11+ では max(NaN, 0) = 0
                 finalColor = max(finalColor, float3(0, 0, 0));
                 float4 col = float4(finalColor, 1.0);
                 UNITY_APPLY_FOG(i.fogCoord, col);
@@ -611,16 +611,16 @@ Shader "Custom/HeadlightInteriorMapping"
                 UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
                 float3 lightColor = _LightColor0.rgb;
 
-                // Specular highlight on lens surface
+                // レンズ表面のスペキュラハイライト
                 float3 halfVec = normalize(worldViewDir + lightDir);
                 float NdotH = saturate(dot(worldNormal, halfVec));
                 float spec = pow(NdotH, _SpecularPower) * _SpecularIntensity;
 
-                // Fresnel with additional light
+                // 追加ライトによるフレネル
                 float NdotV = saturate(dot(worldNormal, worldViewDir));
                 float fresnel = pow(1.0 - NdotV, _FresnelPower) * _FresnelIntensity;
 
-                // Subtle interior brightening (light passing through lens)
+                // 控えめな内部の明るさ加算（レンズ透過光）
                 float NdotL = saturate(dot(worldNormal, lightDir));
                 float3 interiorAdd = _InteriorColor.rgb * _InteriorBrightness * NdotL * 0.3;
 
