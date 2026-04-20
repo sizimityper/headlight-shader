@@ -2,11 +2,11 @@ Shader "Custom/HeadlightInteriorMapping"
 {
     Properties
     {
-        [Header(ライティング)]
+        [Header(Lighting)]
         _ShadowStrength ("影の強さ", Range(0, 1)) = 0.5
         _MinBrightness ("最小明るさ", Range(0, 1)) = 0.1
 
-        [Header(レンズ表面)]
+        [Header(Lens Surface)]
         _MainTex ("ベースカラー (RGB)", 2D) = "white" {}
         _BaseColorStrength ("ベースカラー強度", Range(0, 1)) = 1.0
         _EdgeMask ("エッジマスク (R=トリム)", 2D) = "white" {}
@@ -16,11 +16,11 @@ Shader "Custom/HeadlightInteriorMapping"
         _FresnelIntensity ("フレネル強度", Range(0, 1)) = 0.5
         _LensRoughness ("レンズ粗さ", Range(0, 1)) = 0.0
 
-        [Header(レンズフルート屈折)]
+        [Header(Lens Flute Refraction)]
         _LensNormal ("レンズフルート法線", 2D) = "bump" {}
         _RefractionStrength ("屈折強度", Range(0, 1)) = 0.05
 
-        [Header(内部マッピング)]
+        [Header(Interior Mapping)]
         _BoxCenter ("ボックス中心 (オブジェクト空間)", Vector) = (0, 0, 0, 0)
         _BoxRotation ("ボックス回転 XYZ (度)", Vector) = (0, 0, 0, 0)
         _ScaleX ("ボックススケール X", Range(0.001, 0.5)) = 0.1
@@ -32,7 +32,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _InteriorBlur ("内部ぼかし", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("内部ぼかしスケール (大=細かい)", Range(5, 300)) = 80
 
-        [Header(内部)]
+        [Header(Interior)]
         _MatCap ("内部マットキャップ", 2D) = "white" {}
         _LensColor ("レンズカラー (全体乗算)", Color) = (1, 1, 1, 1)
         _BulbColor ("バルブカラー", Color) = (1, 0.5, 0, 1)
@@ -41,7 +41,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _FacetCount ("ファセット数 (XY)", Vector) = (8, 4, 0, 0)
         _FacetStrength ("ファセット強度", Range(0, 0.5)) = 0.1
 
-        [Header(バルブ)]
+        [Header(Bulb)]
         _BulbPosition ("バルブ位置 (XYZ, オブジェクト空間)", Vector) = (0, 0, -0.5, 0)
         _BulbRotation ("バルブ回転 XYZ (度)", Vector) = (0, 0, 0, 0)
         _BulbBodySize ("バルブ本体サイズ (半径)", Range(0.001, 0.1)) = 0.02
