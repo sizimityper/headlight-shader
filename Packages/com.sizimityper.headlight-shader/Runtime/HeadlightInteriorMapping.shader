@@ -28,7 +28,6 @@ Shader "Custom/HeadlightInteriorMapping"
         _ScaleZ ("ボックススケール Z", Range(0.001, 0.5)) = 0.1
         [KeywordEnum(Box, Ellipsoid, RoundedBox)] _InteriorShape ("内部形状", Float) = 0
         _FilletRadius ("フィレット半径", Range(0, 0.5)) = 0.1
-        _BowlCurvature ("奥壁お椀曲率", Range(0, 50)) = 0
         [Toggle(_SYMMETRIC_INTERIOR)] _SymmetricInterior ("内部を左右対称にする (Xミラー)", Float) = 0
         _InteriorBlur ("内部ぼかし", Range(0, 0.2)) = 0.05
         _InteriorBlurScale ("内部ぼかしスケール (大=細かい)", Range(5, 300)) = 80
@@ -135,7 +134,6 @@ Shader "Custom/HeadlightInteriorMapping"
             float _RefractionStrength;
 
             float _FilletRadius;
-            float _BowlCurvature;
             float4 _BoxCenter;
             float4 _BoxRotation;
             float _ScaleX;
@@ -220,49 +218,9 @@ Shader "Custom/HeadlightInteriorMapping"
                 // Determine which face was hit and compute UV
                 if (axis == 2)
                 {
-                    float zSign = sign(rayDir.z);
-                    hitNormal = float3(0, 0, zSign);
+                    // Back wall
+                    hitNormal = float3(0, 0, sign(rayDir.z));
                     hitUV = hitPos.xy / boxScale.xy * 0.5 + 0.5;
-
-                    // Bowl curvature: replace flat back wall with paraboloid z = faceZ - zSign*k*(x²+y²)
-                    if (_BowlCurvature > 0.0)
-                    {
-                        float k = _BowlCurvature;
-                        float faceZ = zSign * boxScale.z;
-                        float A = zSign * k * (rayDir.x*rayDir.x + rayDir.y*rayDir.y);
-                        float B = rayDir.z + zSign * k * 2.0 * (rayOrigin.x*rayDir.x + rayOrigin.y*rayDir.y);
-                        float C = rayOrigin.z - faceZ + zSign * k * (rayOrigin.x*rayOrigin.x + rayOrigin.y*rayOrigin.y);
-
-                        float tBowl = -1.0;
-                        if (abs(A) < 1e-6)
-                        {
-                            if (abs(B) > 1e-6) tBowl = -C / B;
-                        }
-                        else
-                        {
-                            float disc = B*B - 4.0*A*C;
-                            if (disc >= 0.0)
-                            {
-                                float sq = sqrt(disc);
-                                float t1 = (-B - sq) / (2.0*A);
-                                float t2 = (-B + sq) / (2.0*A);
-                                if      (t1 > 0.001 && t2 > 0.001) tBowl = min(t1, t2);
-                                else if (t1 > 0.001) tBowl = t1;
-                                else if (t2 > 0.001) tBowl = t2;
-                            }
-                        }
-
-                        if (tBowl > 0.0)
-                        {
-                            float3 p = rayOrigin + rayDir * tBowl;
-                            if (abs(p.x) <= boxScale.x && abs(p.y) <= boxScale.y)
-                            {
-                                hitPos = p;
-                                hitUV = p.xy / boxScale.xy * 0.5 + 0.5;
-                                hitNormal = normalize(float3(2.0*zSign*k*p.x, 2.0*zSign*k*p.y, 1.0));
-                            }
-                        }
-                    }
                 }
                 else if (axis == 0)
                 {
@@ -356,16 +314,7 @@ Shader "Custom/HeadlightInteriorMapping"
 
                 float3 absN = abs(hitNormal);
                 if (absN.z >= absN.x && absN.z >= absN.y)
-                {
                     hitUV = p.xy / halfExtents.xy * 0.5 + 0.5;
-                    // Bowl curvature: replace Z-face normal with paraboloid normal
-                    if (_BowlCurvature > 0.0)
-                    {
-                        float zSign = sign(hitNormal.z);
-                        float k = _BowlCurvature;
-                        hitNormal = normalize(float3(2.0*zSign*k*p.x, 2.0*zSign*k*p.y, 1.0));
-                    }
-                }
                 else if (absN.x >= absN.y)
                     hitUV = p.zy / halfExtents.zy * 0.5 + 0.5;
                 else
