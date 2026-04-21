@@ -19,6 +19,9 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Lens Flute Refraction)]
         _LensNormal ("レンズフルート法線", 2D) = "bump" {}
         _RefractionStrength ("屈折強度", Range(0, 1)) = 0.05
+        [Toggle(_LENS_PYRAMID)] _LensPyramid ("ピラミッドレンズパターン (プロシージャル)", Float) = 0
+        _LensPyramidScale ("ピラミッド密度", Range(1, 200)) = 30
+        _LensPyramidStrength ("ピラミッド傾き強度", Range(0, 2)) = 0.8
 
         [Header(Interior Mapping)]
         _BoxCenter ("ボックス中心 (オブジェクト空間)", Vector) = (0, 0, 0, 0)
@@ -35,7 +38,8 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Interior)]
         _MatCap ("内部マットキャップ", 2D) = "white" {}
         _LensColor ("レンズカラー (全体乗算)", Color) = (1, 1, 1, 1)
-        _BulbColor ("バルブカラー", Color) = (1, 0.5, 0, 1)
+        _BulbColor ("バルブカラー (物理色)", Color) = (1, 0.5, 0, 1)
+        _EmissionColor ("エミッションカラー", Color) = (1, 0.5, 0, 1)
         _InteriorRoughness ("内部粗さ", Range(0, 1)) = 0.0
         _InteriorSaturation ("内部彩度", Range(0, 2)) = 1.0
         _FacetCount ("ファセット数 (XY)", Vector) = (8, 4, 0, 0)
@@ -82,6 +86,7 @@ Shader "Custom/HeadlightInteriorMapping"
             #pragma shader_feature _INTERIORSHAPE_BOX _INTERIORSHAPE_ELLIPSOID _INTERIORSHAPE_ROUNDEDBOX
             #pragma shader_feature _SYMMETRIC_INTERIOR
             #pragma shader_feature _BULBSHAPE_GLASS
+            #pragma shader_feature _LENS_PYRAMID
 
             #include "UnityCG.cginc"
             #include "Lighting.cginc"
@@ -132,6 +137,8 @@ Shader "Custom/HeadlightInteriorMapping"
             float4 _EdgeMask_ST;
             float _LensRoughness;
             float _RefractionStrength;
+            float _LensPyramidScale;
+            float _LensPyramidStrength;
 
             float _FilletRadius;
             float4 _BoxCenter;
@@ -144,6 +151,7 @@ Shader "Custom/HeadlightInteriorMapping"
             sampler2D _MatCap;
             float4 _LensColor;
             float4 _BulbColor;
+            float4 _EmissionColor;
             float _InteriorRoughness;
             float _InteriorSaturation;
             float4 _FacetCount;
@@ -376,6 +384,19 @@ Shader "Custom/HeadlightInteriorMapping"
                 return viewN.xy * 0.5 + 0.5;
             }
 
+            // Procedural pyramid lens normal (tangent-space).
+            // Divides each cell into 4 triangles via the two diagonals; each triangle has a flat slope.
+            float3 computePyramidLensNormal(float2 uv, float scale, float strength)
+            {
+                float2 cell = frac(uv * scale) - 0.5;
+                float3 n;
+                if (abs(cell.x) > abs(cell.y))
+                    n = float3(sign(cell.x) * strength, 0.0, 1.0);
+                else
+                    n = float3(0.0, sign(cell.y) * strength, 1.0);
+                return normalize(n);
+            }
+
             // Procedural kamaboko facet normal (tangent-space, z-forward)
             float3 computeFacetNormal(float2 uv, float2 facetCount, float facetStrength)
             {
@@ -426,6 +447,10 @@ Shader "Custom/HeadlightInteriorMapping"
                 // 2. Lens flute refraction for interior ray
                 // ==========================================
                 float3 lensNormalTS = UnpackNormal(tex2D(_LensNormal, i.uvs.xy));
+                #if _LENS_PYRAMID
+                float3 pyramidNormalTS = computePyramidLensNormal(i.uvs.zw, _LensPyramidScale, _LensPyramidStrength);
+                lensNormalTS = normalize(float3(lensNormalTS.xy + pyramidNormalTS.xy, lensNormalTS.z));
+                #endif
                 // TBN already in object space from vertex shader
                 float3 objTangent = normalize(i.objTangent);
                 float3 objBitangent = normalize(i.objBitangent);
@@ -568,7 +593,7 @@ Shader "Custom/HeadlightInteriorMapping"
                         float3 toBulb_i = normalize(bulbPos_i - hitPos);
                         float3 reflectedBulb_i = reflect(-toBulb_i, perturbedNormal);
                         float bulbSpec_i = pow(saturate(dot(reflectedBulb_i, -localInteriorRay)), _EmissionSharpness);
-                        emissionAdd += bulbSpec_i * _BulbColor.rgb * _EmissionIntensity / _BulbCount;
+                        emissionAdd += bulbSpec_i * _EmissionColor.rgb * _EmissionIntensity / _BulbCount;
                         minBulbDistToHit = min(minBulbDistToHit, length(hitPos - bulbPos_i));
                     }
 
@@ -601,7 +626,7 @@ Shader "Custom/HeadlightInteriorMapping"
                     float3 bulbEnvColor = tex2D(_MatCap, getMatcapUV(bulbWorldN)).rgb;
                     float bulbEnvLuma = dot(bulbEnvColor, float3(0.2126, 0.7152, 0.0722));
                     interiorColor = lerp(bulbEnvColor, bulbEnvLuma.xxx, 1.0 - _InteriorSaturation) * _BulbColor.rgb;
-                    emissionAdd += _BulbColor.rgb * _EmissionIntensity;
+                    emissionAdd += _EmissionColor.rgb * _EmissionIntensity;
                     #endif
                 }
 
@@ -617,7 +642,7 @@ Shader "Custom/HeadlightInteriorMapping"
                         float tClosest = clamp(dot(toFilament, localInteriorRay), 0.0, wallT);
                         float rayDist = length(localRayOrigin + localInteriorRay * tClosest - bulbPos_i);
                         float glow = pow(saturate(1.0 - rayDist / glowRadius), 2.0);
-                        emissionAdd += _BulbColor.rgb * glow * _EmissionIntensity / _BulbCount;
+                        emissionAdd += _EmissionColor.rgb * glow * _EmissionIntensity / _BulbCount;
                     }
                 }
 
