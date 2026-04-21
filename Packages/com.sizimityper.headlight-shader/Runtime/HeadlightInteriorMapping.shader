@@ -9,7 +9,8 @@ Shader "Custom/HeadlightInteriorMapping"
         [Header(Lens Surface)]
         _MainTex ("ベースカラー (RGB)", 2D) = "white" {}
         _BaseColorStrength ("ベースカラー強度", Range(0, 1)) = 1.0
-        _EdgeMask ("エッジマスク (R=トリム)", 2D) = "white" {}
+        _EdgeMask ("エリアマスク (R=透過レンズ G=パッキン B=異方向反射)", 2D) = "white" {}
+        _GasketColor ("パッキンカラー", Color) = (0.05, 0.05, 0.05, 1)
         _SpecularPower ("鏡面ハイライトの鋭さ", Range(1, 256)) = 64
         _SpecularIntensity ("鏡面ハイライト強度", Range(0, 2)) = 0.8
         _FresnelPower ("フレネルパワー", Range(1, 10)) = 3.0
@@ -40,6 +41,7 @@ Shader "Custom/HeadlightInteriorMapping"
         _LensColor ("レンズカラー (全体乗算)", Color) = (1, 1, 1, 1)
         _BulbColor ("バルブカラー (物理色)", Color) = (1, 0.5, 0, 1)
         _EmissionColor ("エミッションカラー", Color) = (1, 0.5, 0, 1)
+        _InteriorBrightness ("異方向反射明度 (消灯時)", Range(0, 1)) = 0.3
         _InteriorRoughness ("内部粗さ", Range(0, 1)) = 0.0
         _InteriorSaturation ("内部彩度", Range(0, 2)) = 1.0
         _FacetCount ("ファセット数 (XY)", Vector) = (8, 4, 0, 0)
@@ -152,6 +154,8 @@ Shader "Custom/HeadlightInteriorMapping"
             float4 _LensColor;
             float4 _BulbColor;
             float4 _EmissionColor;
+            float4 _GasketColor;
+            float _InteriorBrightness;
             float _InteriorRoughness;
             float _InteriorSaturation;
             float4 _FacetCount;
@@ -384,7 +388,7 @@ Shader "Custom/HeadlightInteriorMapping"
                 return viewN.xy * 0.5 + 0.5;
             }
 
-            // Procedural pyramid lens normal (tangent-space).
+// Procedural pyramid lens normal (tangent-space).
             // Divides each cell into 4 triangles via the two diagonals; each triangle has a flat slope.
             float3 computePyramidLensNormal(float2 uv, float scale, float strength)
             {
@@ -653,12 +657,20 @@ Shader "Custom/HeadlightInteriorMapping"
                 float ambientLuma = dot(shAmbient, float3(0.2126, 0.7152, 0.0722));
 
                 float3 baseColor = tex2D(_MainTex, i.uvs.zw).rgb;
-                float edgeMask = tex2D(_EdgeMask, i.uvs.zw).r;
-                float3 finalColor = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor * edgeMask;
+                float3 areaMask = tex2D(_EdgeMask, i.uvs.zw).rgb;
+                float maskR = areaMask.r; // 透過レンズ
+                float maskG = areaMask.g; // パッキン
+                float maskB = areaMask.b; // 異方向反射
+
+                float3 lensArea    = interiorColor * lerp(1.0, baseColor, _BaseColorStrength) * shadowFactor * maskR;
+                float3 gasketArea  = _GasketColor.rgb * maskG * shadowFactor;
+                float interiorLuma = dot(interiorColor, float3(0.2126, 0.7152, 0.0722));
+                float3 anisotropicArea = (1.0 - interiorLuma) * lerp(1.0, baseColor, _BaseColorStrength) * _InteriorBrightness * shadowFactor * maskB;
+
+                float3 finalColor = (lensArea + anisotropicArea) * _LensColor.rgb + gasketArea;
                 finalColor += specular;
                 finalColor += fresnel * lensEnvColor * shadowFactor;
-                finalColor *= _LensColor.rgb;
-                finalColor += emissionAdd * edgeMask;
+                finalColor += emissionAdd * maskR;
 
                 // NaN guard: max(NaN, 0) = 0 on DirectX 11+ hardware
                 finalColor = max(finalColor, float3(0, 0, 0));
